@@ -1,0 +1,9 @@
+{
+  "id": "after_dialogue_01",
+  "starts_after": "dialogue_01",
+  "requirements": [
+    {"requirement_type": "action_count", "target_id": "creature_main", "action_id": "fed", "required_amount": 5},
+    {"requirement_type": "action_count", "target_id": "creature_main", "action_id": "played", "required_amount": 5},
+    {"requirement_type": "global_count", "target_id": "", "action_id": "poops_cleaned", "required_amount": 10}
+  ]
+}

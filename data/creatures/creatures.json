@@ -1,0 +1,38 @@
+{
+  "creature_a": {
+    "display_name": "Pipa",
+    "personality": "activa",
+    "color": "#F5C6D6",
+    "accent": "#8B756E",
+    "shape": "ears",
+    "decay": {"satiety": 0.045, "hygiene": 0.025, "energy": 0.025, "fun": 0.04, "affection": 0.012, "health": 0.0},
+    "request_symbols": ["food", "play", "happy"],
+    "silent_hunger": false,
+    "needs_pet_to_sleep": false,
+    "animation_speed": 1.4
+  },
+  "creature_b": {
+    "display_name": "Mota",
+    "personality": "silenciosa",
+    "color": "#BDDDF2",
+    "accent": "#71677B",
+    "shape": "antenna",
+    "decay": {"satiety": 0.04, "hygiene": 0.02, "energy": 0.02, "fun": 0.025, "affection": 0.01, "health": 0.0},
+    "request_symbols": ["ellipsis", "heart"],
+    "silent_hunger": true,
+    "needs_pet_to_sleep": false,
+    "animation_speed": 0.75
+  },
+  "creature_main": {
+    "display_name": "Terry",
+    "personality": "tímida",
+    "color": "#CEC7EC",
+    "accent": "#71677B",
+    "shape": "tuft",
+    "decay": {"satiety": 0.04, "hygiene": 0.022, "energy": 0.02, "fun": 0.028, "affection": 0.014, "health": 0.0},
+    "request_symbols": ["ellipsis", "pet", "heart"],
+    "silent_hunger": false,
+    "needs_pet_to_sleep": true,
+    "animation_speed": 0.9
+  }
+}

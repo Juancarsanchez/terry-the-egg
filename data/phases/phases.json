@@ -1,0 +1,52 @@
+{
+  "phases": [
+    {
+      "id": 0,
+      "name": "Incubación",
+      "available_actions": ["feed", "status"],
+      "requirements": [{"type": "all_hatched"}],
+      "next_phase": 1
+    },
+    {
+      "id": 1,
+      "name": "Convivencia",
+      "available_actions": ["feed", "play", "sleep", "clean", "status"],
+      "requirements": [
+        {"type": "each_action", "action": "fed", "amount": 2},
+        {"type": "each_action", "action": "played", "amount": 1},
+        {"type": "action", "target": "creature_main", "action": "petted", "amount": 2},
+        {"type": "action", "target": "creature_main", "action": "slept", "amount": 1},
+        {"type": "global", "action": "poops_cleaned", "amount": 1},
+        {"type": "active_time", "amount": 20}
+      ],
+      "close_event": "prepare_disappearance",
+      "next_phase": 2
+    },
+    {
+      "id": 2,
+      "name": "La ausencia",
+      "available_actions": ["feed", "play", "sleep", "clean", "status"],
+      "requirements": [{"type": "dialogue_seen", "dialogue": "dialogue_01"}],
+      "next_phase": 3
+    },
+    {
+      "id": 3,
+      "name": "Después de las palabras",
+      "available_actions": ["feed", "play", "sleep", "clean", "status"],
+      "requirements": [
+        {"type": "post_action", "target": "creature_main", "action": "fed", "amount": 5},
+        {"type": "post_action", "target": "creature_main", "action": "played", "amount": 5},
+        {"type": "post_global", "action": "poops_cleaned", "amount": 10}
+      ],
+      "close_event": "start_dialogue_02",
+      "next_phase": 4
+    },
+    {
+      "id": 4,
+      "name": "Tu lado",
+      "available_actions": ["feed", "play", "sleep", "clean", "status", "show_player_place"],
+      "requirements": [{"type": "flag", "flag": "player_place_shown"}],
+      "next_phase": 4
+    }
+  ]
+}

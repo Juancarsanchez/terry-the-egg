@@ -1,0 +1,44 @@
+{
+  "dialogue_01": {
+    "once": true,
+    "start": "d01_start",
+    "nodes": {
+      "d01_start": {
+        "speaker": "Terry",
+        "text": "Se fue.",
+        "symbol": "ellipsis",
+        "delay": 1.0,
+        "options": [
+          {"text": "¿Quién se fue?", "value": "who", "next": "d01_who"},
+          {"text": "¿Dónde está?", "value": "where", "next": "d01_where"},
+          {"text": "No te entiendo.", "value": "confused", "next": "d01_confused"}
+        ],
+        "answer_key": "dialogue_01_answer"
+      },
+      "d01_who": {"speaker": "Terry", "text": "La otra.", "next": ""},
+      "d01_where": {"speaker": "Terry", "text": "Fuera.", "next": ""},
+      "d01_confused": {"speaker": "Terry", "text": "Se fue.", "next": ""}
+    }
+  },
+  "dialogue_02": {
+    "once": true,
+    "start": "d02_start",
+    "nodes": {
+      "d02_start": {
+        "speaker": "Terry",
+        "text": "Ahora estamos mejor.",
+        "symbol": "heart",
+        "delay": 0.5,
+        "options": [
+          {"text": "Falta alguien.", "value": "missing", "next": "d02_missing"},
+          {"text": "¿Estás contenta?", "value": "happy", "next": "d02_happy"},
+          {"text": "Sí, estamos mejor.", "value": "agree", "next": "d02_agree"}
+        ],
+        "answer_key": "dialogue_02_answer"
+      },
+      "d02_missing": {"speaker": "Terry", "text": "Se fue.", "next": ""},
+      "d02_happy": {"speaker": "Terry", "text": "Estoy contigo.", "next": ""},
+      "d02_agree": {"speaker": "Terry", "text": "Yo también.", "next": ""}
+    }
+  }
+}
