@@ -5,7 +5,11 @@ signal changed
 
 const CREATURE_IDS := ["creature_a", "creature_b", "creature_main"]
 const NEED_NAMES := ["satiety", "hygiene", "energy", "fun", "affection", "health"]
-const EGG_NUTRITION_REQUIRED := 15
+const SAVE_VERSION := 2
+const EGG_CARE_REQUIRED := 12
+const EGG_CARE_CAPACITY := 3
+const EGG_CARE_INTERVAL_SECONDS := 5 * 60
+const EGG_NUTRITION_REQUIRED := 4
 const EGG_MEAL_CAPACITY := 2
 const EGG_MEAL_INTERVAL_SECONDS := 60 * 60
 const CREATURE_MEAL_CAPACITY := 2
@@ -35,9 +39,11 @@ func reset_all() -> void:
 	creatures.clear()
 	for creature_id in CREATURE_IDS:
 		eggs[creature_id] = {
-			"heat": 0.0,
+			"care": 0.0,
+			"care_required": float(EGG_CARE_REQUIRED),
+			"care_strokes": 0,
+			"next_care_unix": 0,
 			"nutrition": 0.0,
-			"heat_required": 5.0,
 			"nutrition_required": float(EGG_NUTRITION_REQUIRED),
 			"meal_bites": 0,
 			"next_meal_unix": 0,
@@ -159,7 +165,7 @@ func set_answer(key: String, value: String) -> void:
 
 func to_dict() -> Dictionary:
 	return {
-		"save_version": 1,
+		"save_version": SAVE_VERSION,
 		"phase": phase,
 		"eggs": eggs,
 		"creatures": creatures,
@@ -174,7 +180,8 @@ func to_dict() -> Dictionary:
 
 
 func load_dict(data: Dictionary) -> bool:
-	if int(data.get("save_version", 0)) != 1:
+	var version := int(data.get("save_version", 0))
+	if version < 1 or version > SAVE_VERSION:
 		return false
 	phase = int(data.get("phase", 0))
 	eggs = (data.get("eggs", {}) as Dictionary).duplicate(true)
@@ -201,7 +208,21 @@ func _repair_missing_fields() -> void:
 			reset_all()
 			return
 		var egg: Dictionary = eggs[creature_id]
-		egg["nutrition"] = clampf(float(egg.get("nutrition", 0.0)), 0.0, float(EGG_NUTRITION_REQUIRED))
+		if not egg.has("care"):
+			var old_heat := float(egg.get("heat", 0.0))
+			var old_heat_required := maxf(1.0, float(egg.get("heat_required", 5.0)))
+			egg["care"] = roundf((old_heat / old_heat_required) * float(EGG_CARE_REQUIRED))
+		egg["care"] = clampf(float(egg.get("care", 0.0)), 0.0, float(EGG_CARE_REQUIRED))
+		egg["care_required"] = float(EGG_CARE_REQUIRED)
+		egg["care_strokes"] = clampi(int(egg.get("care_strokes", 0)), 0, EGG_CARE_CAPACITY)
+		egg["next_care_unix"] = maxi(0, int(egg.get("next_care_unix", 0)))
+		egg.erase("heat")
+		egg.erase("heat_required")
+		var old_nutrition := float(egg.get("nutrition", 0.0))
+		var old_nutrition_required := maxf(1.0, float(egg.get("nutrition_required", EGG_NUTRITION_REQUIRED)))
+		if old_nutrition_required > float(EGG_NUTRITION_REQUIRED):
+			old_nutrition = roundf((old_nutrition / old_nutrition_required) * float(EGG_NUTRITION_REQUIRED))
+		egg["nutrition"] = clampf(old_nutrition, 0.0, float(EGG_NUTRITION_REQUIRED))
 		egg["nutrition_required"] = float(EGG_NUTRITION_REQUIRED)
 		if not egg.has("meal_bites"):
 			egg["meal_bites"] = 0
@@ -211,6 +232,16 @@ func _repair_missing_fields() -> void:
 			egg["next_meal_unix"] = 0
 		else:
 			egg["next_meal_unix"] = maxi(0, int(egg["next_meal_unix"]))
+		if not bool(egg.get("hatched", false)):
+			var care_ratio := float(egg["care"]) / float(EGG_CARE_REQUIRED)
+			if care_ratio >= 0.75:
+				egg["visual_state"] = "crack_75"
+			elif care_ratio >= 0.5:
+				egg["visual_state"] = "crack_50"
+			elif care_ratio >= 0.25:
+				egg["visual_state"] = "crack_25"
+			else:
+				egg["visual_state"] = "intact"
 		eggs[creature_id] = egg
 		var creature: Dictionary = creatures[creature_id]
 		creature["sleeping"] = bool(creature.get("sleeping", false))

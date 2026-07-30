@@ -1,25 +1,29 @@
 class_name SymbolBubble
 extends Control
 
-const GLYPHS := {
-	"food": "YUM",
-	"play": "♪",
-	"sleep": "Zz",
-	"dirty": "!",
-	"sick": "+",
-	"heart": "♥",
-	"empty_heart": "♡",
-	"no": "X",
-	"full": "OK",
-	"pet": "<3",
-	"warmth": "",
-	"question": "?",
-	"exclamation": "!",
-	"ellipsis": "...",
-	"sad": "↓",
-	"happy": "↑",
-	"surprise": "!",
-	"eye": "●"
+const EXPRESSION_SHEET: Texture2D = preload("res://assets/ui/expression-symbols.png")
+const TOOL_SHEET: Texture2D = preload("res://assets/ui/tool-cursors.png")
+const EXPRESSION_CELL := Vector2(313.5, 313.5)
+const TOOL_CELL := Vector2(418, 418)
+const SYMBOL_CELLS := {
+	"food": Vector2i(0, 0),
+	"play": Vector2i(1, 0),
+	"sleep": Vector2i(2, 0),
+	"dirty": Vector2i(3, 0),
+	"sick": Vector2i(0, 1),
+	"heart": Vector2i(1, 1),
+	"empty_heart": Vector2i(1, 1),
+	"pet": Vector2i(1, 1),
+	"no": Vector2i(2, 1),
+	"full": Vector2i(3, 1),
+	"question": Vector2i(0, 2),
+	"exclamation": Vector2i(1, 2),
+	"ellipsis": Vector2i(2, 2),
+	"sad": Vector2i(3, 2),
+	"happy": Vector2i(0, 3),
+	"surprise": Vector2i(1, 3),
+	"eye": Vector2i(2, 3),
+	"hatch": Vector2i(3, 3)
 }
 
 var current_symbol := ""
@@ -28,21 +32,20 @@ var remaining := 0.0
 var persistent := false
 var sequence: Array[String] = []
 var sequence_duration := 1.0
-var label: Label
+var icon: TextureRect
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	custom_minimum_size = Vector2(32, 22)
 	size = Vector2(32, 22)
-	label = Label.new()
-	label.position = Vector2(1, 0)
-	label.size = Vector2(30, 17)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 8)
-	label.add_theme_color_override("font_color", Color("#4C4053"))
-	add_child(label)
+	icon = TextureRect.new()
+	icon.position = Vector2(8, 0)
+	icon.size = Vector2(16, 16)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(icon)
 	hide()
 
 
@@ -60,13 +63,15 @@ func _process(delta: float) -> void:
 func show_symbol(symbol_id: String, duration: float = 2.0, priority: int = 10, keep: bool = false) -> bool:
 	if current_symbol != "" and priority < current_priority:
 		return false
+	var symbol_texture := _texture_for_symbol(symbol_id)
+	if symbol_texture == null:
+		return false
 	current_symbol = symbol_id
 	current_priority = priority
 	remaining = duration
 	persistent = keep
 	sequence_duration = maxf(0.05, sequence_duration)
-	label.text = str(GLYPHS.get(symbol_id, symbol_id))
-	label.visible = symbol_id not in ["heart", "empty_heart", "warmth"]
+	icon.texture = symbol_texture
 	show()
 	queue_redraw()
 	return true
@@ -92,70 +97,42 @@ func clear() -> void:
 	current_priority = -1
 	persistent = false
 	sequence.clear()
+	if icon != null:
+		icon.texture = null
 	hide()
+
+
+func _texture_for_symbol(symbol_id: String) -> AtlasTexture:
+	var atlas := AtlasTexture.new()
+	if symbol_id == "pet_request":
+		atlas.atlas = TOOL_SHEET
+		atlas.region = Rect2(TOOL_CELL.x, 0, TOOL_CELL.x, TOOL_CELL.y)
+		return atlas
+	if not SYMBOL_CELLS.has(symbol_id):
+		return null
+	var cell: Vector2i = SYMBOL_CELLS[symbol_id]
+	atlas.atlas = EXPRESSION_SHEET
+	atlas.region = Rect2(
+		float(cell.x) * EXPRESSION_CELL.x,
+		float(cell.y) * EXPRESSION_CELL.y,
+		EXPRESSION_CELL.x,
+		EXPRESSION_CELL.y
+	)
+	return atlas
 
 
 func _draw() -> void:
 	if current_symbol == "":
 		return
-	draw_circle(Vector2(8, 9), 8, Color("#FFF8E8"))
-	draw_circle(Vector2(24, 9), 8, Color("#FFF8E8"))
-	draw_rect(Rect2(8, 1, 16, 16), Color("#FFF8E8"))
-	draw_arc(Vector2(8, 9), 8, PI * 0.5, PI * 1.5, 10, Color("#4C4053"), 1.5)
-	draw_arc(Vector2(24, 9), 8, PI * 1.5, PI * 2.5, 10, Color("#4C4053"), 1.5)
-	draw_line(Vector2(8, 1), Vector2(24, 1), Color("#4C4053"), 1.5)
-	draw_line(Vector2(8, 17), Vector2(24, 17), Color("#4C4053"), 1.5)
+	var fill := Color("#FFF8E8")
+	var ink := Color("#4C4053")
+	draw_circle(Vector2(8, 9), 8, fill)
+	draw_circle(Vector2(24, 9), 8, fill)
+	draw_rect(Rect2(8, 1, 16, 16), fill)
+	draw_arc(Vector2(8, 9), 8, PI * 0.5, PI * 1.5, 10, ink, 1.5)
+	draw_arc(Vector2(24, 9), 8, PI * 1.5, PI * 2.5, 10, ink, 1.5)
+	draw_line(Vector2(8, 1), Vector2(24, 1), ink, 1.5)
+	draw_line(Vector2(8, 17), Vector2(24, 17), ink, 1.5)
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(13, 17), Vector2(19, 17), Vector2(16, 22)
-	]), Color("#4C4053"))
-	if current_symbol == "warmth":
-		_draw_warmth()
-	elif current_symbol == "heart":
-		_draw_pastel_heart(false)
-	elif current_symbol == "empty_heart":
-		_draw_pastel_heart(true)
-
-
-func _draw_warmth() -> void:
-	var center := Vector2(16, 9)
-	var outline := Color("#4C4053")
-	var gold := Color("#F4C452")
-	var cream := Color("#FFF3DE")
-	var outer := PackedVector2Array([
-		center + Vector2(0, -7),
-		center + Vector2(2, -2),
-		center + Vector2(7, 0),
-		center + Vector2(2, 2),
-		center + Vector2(0, 7),
-		center + Vector2(-2, 2),
-		center + Vector2(-7, 0),
-		center + Vector2(-2, -2)
-	])
-	var inner := PackedVector2Array([
-		center + Vector2(0, -5),
-		center + Vector2(1.5, -1.5),
-		center + Vector2(5, 0),
-		center + Vector2(1.5, 1.5),
-		center + Vector2(0, 5),
-		center + Vector2(-1.5, 1.5),
-		center + Vector2(-5, 0),
-		center + Vector2(-1.5, -1.5)
-	])
-	draw_colored_polygon(outer, outline)
-	draw_colored_polygon(inner, gold)
-	draw_circle(center, 1.5, cream)
-
-
-func _draw_pastel_heart(empty: bool) -> void:
-	var outline := Color("#4C4053")
-	var fill := Color("#F49A8F") if not empty else Color("#FFF3DE")
-	draw_circle(Vector2(12, 7), 5, outline)
-	draw_circle(Vector2(20, 7), 5, outline)
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(7, 8), Vector2(25, 8), Vector2(16, 17)
-	]), outline)
-	draw_circle(Vector2(12, 7), 3.3, fill)
-	draw_circle(Vector2(20, 7), 3.3, fill)
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(9, 8), Vector2(23, 8), Vector2(16, 14.5)
-	]), fill)
+	]), ink)

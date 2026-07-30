@@ -17,6 +17,7 @@ const WALLPAPER := Color("#8EC8C4")
 const ENTITY_POSITIONS := [Vector2(10, 24), Vector2(94, 24), Vector2(178, 24)]
 const TOOL_CURSOR_SHEET := "res://assets/ui/tool-cursors.png"
 const TOOL_CELL_SIZE := 418
+const GAME_FONT: FontFile = preload("res://assets/fonts/PixelifySans-Variable.ttf")
 
 var game_state := TerryGameState.new()
 var definitions: Dictionary
@@ -52,6 +53,7 @@ var start_panel: Panel
 var continue_button: Button
 var exit_backdrop: ColorRect
 var exit_panel: Panel
+var save_exit_button: Button
 var debug_target_index := 0
 var _loaded_existing_save := false
 var _game_started := false
@@ -60,11 +62,14 @@ var _tick_accumulator := 0.0
 var _prompt_accumulator := 0.0
 var _autosave_accumulator := 0.0
 var _dialogue_generation := 0
-var _egg_hunger_alerted: Dictionary = {}
+var _egg_request_alerted: Dictionary = {}
 
 
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
+	var game_theme := Theme.new()
+	game_theme.default_font = GAME_FONT
+	theme = game_theme
 	definitions = CreatureDefinition.load_all()
 	cursor_manager = CursorManager.new()
 	add_child(cursor_manager)
@@ -99,7 +104,7 @@ func _process(delta: float) -> void:
 	_autosave_accumulator += delta
 	if _tick_accumulator >= 1.0:
 		_tick_accumulator = 0.0
-		_update_egg_meal_requests()
+		_update_egg_requests()
 		_update_creature_timers()
 		progression.evaluate(game_state)
 		_refresh_debug()
@@ -183,11 +188,11 @@ func _build_interface() -> void:
 		arena.add_child(slot)
 
 	var actions := [
-		{"id": "food", "text": "COMER"},
-		{"id": "play", "text": "JUGAR"},
-		{"id": "sleep", "text": "DORMIR"},
-		{"id": "clean", "text": "LIMPIAR"},
-		{"id": "status", "text": "ESTADO"}
+		{"id": "food", "text": "YUM"},
+		{"id": "play", "text": "JUEGO"},
+		{"id": "sleep", "text": "SIESTA"},
+		{"id": "clean", "text": "ASEO"},
+		{"id": "status", "text": "MIRAR"}
 	]
 	var controls_tray := Panel.new()
 	controls_tray.position = Vector2(30, 219)
@@ -208,7 +213,7 @@ func _build_interface() -> void:
 	status_panel.size = Vector2(272, 36)
 	status_panel.add_theme_stylebox_override("panel", _stylebox(CREAM, INK, 2, 10))
 	add_child(status_panel)
-	status_label = _make_label("LOS HUEVOS RESPONDEN AL CALOR, AL CUIDADO Y AL TIEMPO.", Vector2(8, 2), Vector2(256, 31), 7)
+	status_label = _make_label("ACÉRCATE DESPACIO. LOS HUEVOS TE HARÁN SABER QUÉ NECESITAN.", Vector2(8, 2), Vector2(256, 31), 7)
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	status_label.add_theme_color_override("font_color", INK)
@@ -347,7 +352,7 @@ func _build_session_menus() -> void:
 	exit_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	exit_heading.add_theme_color_override("font_color", INK)
 	exit_panel.add_child(exit_heading)
-	var save_exit_button := _make_button("GUARDAR Y SALIR", Vector2(23, 50), Vector2(184, 37), 9)
+	save_exit_button = _make_button("GUARDAR Y SALIR", Vector2(23, 50), Vector2(184, 37), 9)
 	save_exit_button.pressed.connect(_save_and_quit)
 	exit_panel.add_child(save_exit_button)
 	var return_button := _make_button("SEGUIR JUGANDO", Vector2(23, 97), Vector2(184, 31), 8)
@@ -388,7 +393,7 @@ func _begin_session() -> void:
 	_sync_from_state()
 	_update_creature_timers()
 	_sync_poops_from_state()
-	_update_egg_meal_requests()
+	_update_egg_requests()
 	progression.evaluate(game_state)
 	if bool(game_state.flags.get("creature_a_disappeared", false)) and "dialogue_01" not in game_state.dialogues_seen:
 		_run_absence_sequence.call_deferred()
@@ -405,6 +410,7 @@ func _show_exit_menu() -> void:
 	if _quitting or exit_backdrop == null:
 		return
 	_cancel_tool()
+	save_exit_button.text = "GUARDAR Y SALIR"
 	exit_backdrop.show()
 
 
@@ -413,10 +419,15 @@ func _cancel_exit() -> void:
 
 
 func _save_and_quit() -> void:
-	if _game_started:
-		save_manager.save_game(game_state)
+	if not _save_current_game():
+		save_exit_button.text = "NO SE PUDO GUARDAR"
+		return
 	_quitting = true
 	get_tree().quit()
+
+
+func _save_current_game() -> bool:
+	return not _game_started or save_manager.save_game(game_state)
 
 
 func _sync_from_state() -> void:
@@ -512,7 +523,7 @@ func _on_target_hover(kind: String, entered: bool) -> void:
 		if cursor_manager.selected_tool == "food":
 			status_label.text = "SUELTA AQUÍ EL FRASCO DE NÉCTAR."
 		else:
-			status_label.text = "MANTÉN PULSADO Y FROTA DE LADO A LADO ↔."
+			status_label.text = "MANTÉN PULSADO Y ACARICIA EL CASCARÓN."
 	elif kind == "creature":
 		if cursor_manager.selected_tool == "":
 			status_label.text = "MANTÉN PULSADO Y MUEVE LA MANO PARA ACARICIAR."
@@ -522,12 +533,31 @@ func _on_target_hover(kind: String, entered: bool) -> void:
 
 func _on_egg_rubbed(creature_id: String) -> void:
 	var egg: Dictionary = game_state.eggs[creature_id]
-	egg["heat"] = minf(float(egg["heat_required"]), float(egg["heat"]) + 1.0)
-	if float(egg["heat"]) >= float(egg["heat_required"]) * 0.6:
-		egg["visual_state"] = "cracked"
-	status_label.text = "%s · EL CASCARÓN ESTÁ MÁS TIBIO." % definitions[creature_id].display_name.to_upper()
+	var display_name: String = str(definitions[creature_id].display_name).to_upper()
+	if not _egg_can_accept_care(creature_id):
+		if egg_nodes.has(creature_id):
+			egg_nodes[creature_id].bubble.show_symbol("ellipsis", 1.0, 80)
+		if float(egg["care"]) >= float(_egg_care_gate(egg)) and float(egg["care"]) < float(egg["care_required"]):
+			status_label.text = "%s QUIERE UN POQUITO DE NÉCTAR ANTES DE SEGUIR CON LOS MIMOS." % display_name
+		else:
+			status_label.text = "%s ESTÁ DESCANSANDO DE TANTOS MIMOS." % display_name
+		return
+	egg["care"] = minf(float(egg["care_required"]), float(egg["care"]) + 1.0)
+	egg["care_strokes"] = mini(TerryGameState.EGG_CARE_CAPACITY, int(egg.get("care_strokes", 0)) + 1)
+	if int(egg["care_strokes"]) >= TerryGameState.EGG_CARE_CAPACITY and float(egg["care"]) < float(egg["care_required"]):
+		egg["next_care_unix"] = int(Time.get_unix_time_from_system()) + TerryGameState.EGG_CARE_INTERVAL_SECONDS
+	_update_egg_visual_state(egg)
+	if egg_nodes.has(creature_id):
+		egg_nodes[creature_id].set_visual_state(str(egg["visual_state"]))
+		egg_nodes[creature_id].show_care_feedback("heart")
+	if int(egg["care_strokes"]) >= TerryGameState.EGG_CARE_CAPACITY:
+		status_label.text = "%s ESTÁ MUY A GUSTO. AHORA QUIERE DESCANSAR UN POQUITO." % display_name
+	else:
+		status_label.text = "%s SE ACOMODA BAJO TU MANO." % display_name
 	audio_manager.play_tone("action")
+	_update_egg_requests(false)
 	_check_hatch(creature_id)
+	save_manager.save_game(game_state)
 
 
 func _on_egg_feed(creature_id: String) -> void:
@@ -543,9 +573,13 @@ func _on_egg_feed(creature_id: String) -> void:
 		if egg_nodes.has(creature_id):
 			egg_nodes[creature_id].bubble.show_symbol("no", 1.25, 90)
 		if float(egg["nutrition"]) >= float(egg["nutrition_required"]):
-			status_label.text = "%s YA NO BUSCA MÁS NÉCTAR · X" % definitions[creature_id].display_name.to_upper()
+			status_label.text = "%s YA ESTÁ BIEN ALIMENTADA." % definitions[creature_id].display_name.to_upper()
+		elif int(egg.get("meal_bites", 0)) >= TerryGameState.EGG_MEAL_CAPACITY or int(egg.get("next_meal_unix", 0)) > int(Time.get_unix_time_from_system()):
+			status_label.text = "%s NO TIENE MÁS HAMBRE. PODRÁS OFRECERLE NÉCTAR MÁS TARDE." % definitions[creature_id].display_name.to_upper()
+		elif float(egg["care"]) < float(_care_required_for_next_meal(egg)):
+			status_label.text = "%s PREFIERE UNOS MIMOS ANTES DE TOMAR NÉCTAR." % definitions[creature_id].display_name.to_upper()
 		else:
-			status_label.text = "%s NO QUIERE MÁS AHORA · VUELVE MÁS TARDE · X" % definitions[creature_id].display_name.to_upper()
+			status_label.text = "%s NO TIENE MÁS HAMBRE. PODRÁS OFRECERLE NÉCTAR MÁS TARDE." % definitions[creature_id].display_name.to_upper()
 		audio_manager.play_tone("wrong")
 		return
 	if not item_drag.drop("egg", creature_id, true):
@@ -558,12 +592,12 @@ func _on_egg_feed(creature_id: String) -> void:
 		var reaction := "full" if int(egg["meal_bites"]) >= TerryGameState.EGG_MEAL_CAPACITY else "happy"
 		egg_nodes[creature_id].bubble.show_symbol(reaction, 1.0, 80)
 	if int(egg["meal_bites"]) >= TerryGameState.EGG_MEAL_CAPACITY and float(egg["nutrition"]) < float(egg["nutrition_required"]):
-		status_label.text = "%s PARECE SACIADA · VUELVE MÁS TARDE." % definitions[creature_id].display_name.to_upper()
+		status_label.text = "%s YA ESTÁ SATISFECHA. AHORA LE VENDRÁN BIEN UNOS MIMOS." % definitions[creature_id].display_name.to_upper()
 	else:
-		status_label.text = "%s HA ACEPTADO EL NÉCTAR." % definitions[creature_id].display_name.to_upper()
+		status_label.text = "%s TOMA EL NÉCTAR CON GUSTO." % definitions[creature_id].display_name.to_upper()
 	audio_manager.play_tone("action")
 	cursor_manager.cancel_tool()
-	_update_egg_meal_requests(false)
+	_update_egg_requests(false)
 	_check_hatch(creature_id)
 	save_manager.save_game(game_state)
 
@@ -574,6 +608,8 @@ func _egg_can_accept_food(creature_id: String) -> bool:
 	var egg: Dictionary = game_state.eggs[creature_id]
 	if bool(egg.get("hatched", false)) or float(egg.get("nutrition", 0.0)) >= float(egg.get("nutrition_required", TerryGameState.EGG_NUTRITION_REQUIRED)):
 		return false
+	if float(egg.get("care", 0.0)) < float(_care_required_for_next_meal(egg)):
+		return false
 	var now := int(Time.get_unix_time_from_system())
 	var next_meal := int(egg.get("next_meal_unix", 0))
 	if next_meal > 0 and now >= next_meal:
@@ -583,29 +619,77 @@ func _egg_can_accept_food(creature_id: String) -> bool:
 	return next_meal == 0 and int(egg.get("meal_bites", 0)) < TerryGameState.EGG_MEAL_CAPACITY
 
 
-func _update_egg_meal_requests(play_sound: bool = true) -> void:
+func _egg_can_accept_care(creature_id: String) -> bool:
+	if not game_state.eggs.has(creature_id):
+		return false
+	var egg: Dictionary = game_state.eggs[creature_id]
+	if bool(egg.get("hatched", false)) or float(egg.get("care", 0.0)) >= float(egg.get("care_required", TerryGameState.EGG_CARE_REQUIRED)):
+		return false
+	var now := int(Time.get_unix_time_from_system())
+	var next_care := int(egg.get("next_care_unix", 0))
+	if next_care > 0 and now >= next_care:
+		egg["care_strokes"] = 0
+		egg["next_care_unix"] = 0
+		next_care = 0
+	return (
+		next_care == 0
+		and int(egg.get("care_strokes", 0)) < TerryGameState.EGG_CARE_CAPACITY
+		and float(egg.get("care", 0.0)) < float(_egg_care_gate(egg))
+	)
+
+
+func _egg_care_gate(egg: Dictionary) -> int:
+	var nutrition := int(egg.get("nutrition", 0))
+	if nutrition >= TerryGameState.EGG_NUTRITION_REQUIRED:
+		return TerryGameState.EGG_CARE_REQUIRED
+	if nutrition >= TerryGameState.EGG_MEAL_CAPACITY:
+		return int(round(float(TerryGameState.EGG_CARE_REQUIRED) * 0.75))
+	return int(round(float(TerryGameState.EGG_CARE_REQUIRED) * 0.25))
+
+
+func _care_required_for_next_meal(egg: Dictionary) -> int:
+	if int(egg.get("nutrition", 0)) >= TerryGameState.EGG_MEAL_CAPACITY:
+		return int(round(float(TerryGameState.EGG_CARE_REQUIRED) * 0.75))
+	return int(round(float(TerryGameState.EGG_CARE_REQUIRED) * 0.25))
+
+
+func _update_egg_visual_state(egg: Dictionary) -> void:
+	var ratio := float(egg.get("care", 0.0)) / float(TerryGameState.EGG_CARE_REQUIRED)
+	if ratio >= 0.75:
+		egg["visual_state"] = "crack_75"
+	elif ratio >= 0.5:
+		egg["visual_state"] = "crack_50"
+	elif ratio >= 0.25:
+		egg["visual_state"] = "crack_25"
+	else:
+		egg["visual_state"] = "intact"
+
+
+func _update_egg_requests(play_sound: bool = true) -> void:
 	var new_request := false
 	for creature_id in TerryGameState.CREATURE_IDS:
 		if not egg_nodes.has(creature_id):
-			_egg_hunger_alerted.erase(creature_id)
+			_egg_request_alerted.erase(creature_id)
 			continue
-		var hungry := _egg_can_accept_food(creature_id)
-		var was_alerted := bool(_egg_hunger_alerted.get(creature_id, false))
-		if hungry:
-			egg_nodes[creature_id].bubble.show_symbol("food", 3600.0, 55, true)
-			if not was_alerted:
+		var desired_symbol := ""
+		if _egg_can_accept_care(creature_id):
+			desired_symbol = "pet_request"
+		elif _egg_can_accept_food(creature_id):
+			desired_symbol = "food"
+		var previous_symbol := str(_egg_request_alerted.get(creature_id, ""))
+		var bubble: SymbolBubble = egg_nodes[creature_id].bubble
+		if desired_symbol != "":
+			if bubble.current_symbol != desired_symbol:
+				bubble.show_symbol(desired_symbol, 3600.0, 55, true)
+			if previous_symbol != desired_symbol:
 				new_request = true
-			_egg_hunger_alerted[creature_id] = true
+			_egg_request_alerted[creature_id] = desired_symbol
 		else:
-			egg_nodes[creature_id].bubble.hide_symbol("food")
-			_egg_hunger_alerted[creature_id] = false
+			if bubble.current_symbol in ["food", "pet_request"]:
+				bubble.clear()
+			_egg_request_alerted[creature_id] = ""
 	if new_request and play_sound:
 		audio_manager.play_tone("talk")
-
-
-func _egg_wait_text(egg: Dictionary) -> String:
-	var seconds := maxi(0, int(egg.get("next_meal_unix", 0)) - int(Time.get_unix_time_from_system()))
-	return _duration_text(seconds)
 
 
 func _duration_text(seconds: int) -> String:
@@ -620,7 +704,7 @@ func _check_hatch(creature_id: String) -> void:
 	var egg: Dictionary = game_state.eggs[creature_id]
 	if bool(egg["hatched"]):
 		return
-	if float(egg["heat"]) >= float(egg["heat_required"]) and float(egg["nutrition"]) >= float(egg["nutrition_required"]):
+	if float(egg["care"]) >= float(egg["care_required"]) and float(egg["nutrition"]) >= float(egg["nutrition_required"]):
 		_hatch_sequence(creature_id)
 
 
@@ -631,7 +715,7 @@ func _hatch_sequence(creature_id: String) -> void:
 	egg["visual_state"] = "hatching"
 	if egg_nodes.has(creature_id):
 		egg_nodes[creature_id].set_visual_state("hatching")
-		egg_nodes[creature_id].bubble.show_sequence(["surprise", "happy"], 0.45, 80)
+		egg_nodes[creature_id].bubble.show_sequence(["hatch", "happy"], 0.45, 80)
 	audio_manager.play_tone("hatch")
 	await get_tree().create_timer(0.8).timeout
 	game_state.hatch(creature_id)
@@ -657,7 +741,7 @@ func _on_creature_action(creature_id: String, tool: String) -> void:
 		"food":
 			if not _creature_can_accept_food(creature_id):
 				var wait_text := _creature_meal_wait_text(creature)
-				var message := "%s NO QUIERE COMER MÁS." % definitions[creature_id].display_name.to_upper()
+				var message := "%s NO TIENE MÁS HAMBRE." % definitions[creature_id].display_name.to_upper()
 				if wait_text != "AHORA":
 					message += " VUELVE EN %s." % wait_text
 				_refuse_creature_action(creature_id, message)
@@ -687,7 +771,7 @@ func _on_creature_action(creature_id: String, tool: String) -> void:
 			_show_status(creature_id)
 			cursor_manager.cancel_tool()
 		_:
-			_refuse_creature_action(creature_id, "%s NO QUIERE ESO." % definitions[creature_id].display_name.to_upper())
+			_refuse_creature_action(creature_id, "%s PREFIERE HACER OTRA COSA AHORA." % definitions[creature_id].display_name.to_upper())
 
 
 func _apply_creature_action(creature_id: String, action: String) -> void:
@@ -1090,10 +1174,13 @@ func _debug_reset_phase() -> void:
 	match game_state.phase:
 		0:
 			for creature_id in TerryGameState.CREATURE_IDS:
-				game_state.eggs[creature_id]["heat"] = 0.0
+				game_state.eggs[creature_id]["care"] = 0.0
+				game_state.eggs[creature_id]["care_strokes"] = 0
+				game_state.eggs[creature_id]["next_care_unix"] = 0
 				game_state.eggs[creature_id]["nutrition"] = 0.0
 				game_state.eggs[creature_id]["meal_bites"] = 0
 				game_state.eggs[creature_id]["next_meal_unix"] = 0
+				game_state.eggs[creature_id]["visual_state"] = "intact"
 		1:
 			for creature_id in TerryGameState.CREATURE_IDS:
 				for action in ["fed", "played", "petted", "slept"]:
@@ -1162,20 +1249,23 @@ func _make_action_button(action_id: String, label_text: String, at: Vector2) -> 
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(icon)
-	var caption_panel := Panel.new()
-	caption_panel.name = "CaptionPanel"
-	caption_panel.position = Vector2(2, 24)
-	caption_panel.size = Vector2(42, 11)
-	caption_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	caption_panel.add_theme_stylebox_override("panel", _stylebox(Color("#FFF3DE"), Color(0.3, 0.25, 0.32, 0.45), 1, 5))
-	button.add_child(caption_panel)
-	var caption := _make_label(label_text, Vector2(0, -3), Vector2(42, 11), 4)
-	caption.name = "Caption"
-	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	caption.add_theme_color_override("font_color", INK)
-	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	caption_panel.add_child(caption)
+	var action_name := _make_label(label_text, Vector2.ZERO, Vector2.ZERO, 5)
+	action_name.name = "ActionName"
+	action_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	action_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	action_name.add_theme_color_override("font_color", CREAM)
+	action_name.add_theme_color_override("font_outline_color", INK)
+	action_name.add_theme_constant_override("outline_size", 1)
+	action_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(action_name)
+	action_name.anchor_left = 0.0
+	action_name.anchor_top = 1.0
+	action_name.anchor_right = 1.0
+	action_name.anchor_bottom = 1.0
+	action_name.offset_left = 1.0
+	action_name.offset_top = -15.0
+	action_name.offset_right = -1.0
+	action_name.offset_bottom = -2.0
 	return button
 
 

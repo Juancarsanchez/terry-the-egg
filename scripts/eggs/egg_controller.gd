@@ -93,9 +93,7 @@ func _on_gui_input(event: InputEvent) -> void:
 		var reversed: bool = _last_direction != Vector2.ZERO and direction.dot(_last_direction) < 0.2
 		if reversed and _gesture_distance >= 12.0:
 			_gesture_distance = 0.0
-			_care_flash = 0.35
 			rubbed.emit(creature_id)
-			bubble.show_symbol("warmth", 0.5, 70)
 		_last_direction = direction
 
 
@@ -103,6 +101,12 @@ func set_visual_state(new_state: String) -> void:
 	visual_state = new_state
 	if new_state == "open":
 		enabled = false
+	queue_redraw()
+
+
+func show_care_feedback(symbol_id: String = "heart") -> void:
+	_care_flash = 0.35
+	bubble.show_symbol(symbol_id, 0.65, 70)
 	queue_redraw()
 
 
@@ -114,8 +118,6 @@ func _draw() -> void:
 		var pulse := 1.5 + sin(_bob * 7.0) * 0.8
 		draw_arc(center, 28 + pulse, 0, TAU, 32, Color("#F4C452"), 2.0)
 		draw_arc(center, 31 + pulse, 0, TAU, 32, Color(1, 0.96, 0.72, 0.65), 1.0)
-	elif _hovered and cursor_manager != null and cursor_manager.selected_tool == "":
-		_draw_rub_guides()
 
 	if visual_state == "open":
 		draw_arc(center + Vector2(0, 12), 22, 0, PI, 20, Color("#4C4053"), 3.0)
@@ -132,9 +134,11 @@ func _draw() -> void:
 			column = 1
 		"creature_main":
 			column = 2
-	var row := 1 if visual_state in ["cracked", "hatching"] else 0
+	var row := 1 if visual_state == "hatching" else 0
 	var source := Rect2(120 + column * 432, row * 512, 432, 512)
 	draw_texture_rect_region(EGG_SHEET, Rect2(0, bob_y, 64, 78), source)
+	if visual_state in ["crack_25", "crack_50", "crack_75"]:
+		_draw_progress_cracks(visual_state, bob_y)
 	if _care_flash > 0.0:
 		_draw_warmth_sparkles(center)
 	if _click_flash > 0.0:
@@ -149,30 +153,38 @@ func _draw_ellipse_shape(center: Vector2, radius: Vector2, color: Color) -> void
 	draw_colored_polygon(points, color)
 
 
-func _draw_rub_guides() -> void:
-	var drift := sin(_bob * 4.0) * 1.2
+func _draw_progress_cracks(stage: String, bob_y: float) -> void:
 	var cream := Color("#FFF3DE")
-	var gold := Color("#F4C452")
-	var left_tip := Vector2(-4 + drift, 50)
-	var left_base := Vector2(9 + drift, 50)
-	var right_tip := Vector2(68 - drift, 50)
-	var right_base := Vector2(55 - drift, 50)
-	draw_line(left_base, left_tip + Vector2(2, 0), cream, 5.0, true)
-	draw_line(left_base, left_tip + Vector2(2, 0), gold, 2.0, true)
-	draw_colored_polygon(PackedVector2Array([
-		left_tip, left_tip + Vector2(7, -6), left_tip + Vector2(7, 6)
-	]), cream)
-	draw_colored_polygon(PackedVector2Array([
-		left_tip + Vector2(1, 0), left_tip + Vector2(6, -4), left_tip + Vector2(6, 4)
-	]), gold)
-	draw_line(right_base, right_tip - Vector2(2, 0), cream, 5.0, true)
-	draw_line(right_base, right_tip - Vector2(2, 0), gold, 2.0, true)
-	draw_colored_polygon(PackedVector2Array([
-		right_tip, right_tip + Vector2(-7, -6), right_tip + Vector2(-7, 6)
-	]), cream)
-	draw_colored_polygon(PackedVector2Array([
-		right_tip + Vector2(-1, 0), right_tip + Vector2(-6, -4), right_tip + Vector2(-6, 4)
-	]), gold)
+	var ink := Color("#4C4053")
+	var first_crack := PackedVector2Array([
+		Vector2(45, 18 + bob_y),
+		Vector2(42, 21 + bob_y),
+		Vector2(45, 24 + bob_y)
+	])
+	draw_polyline(first_crack, cream, 2.5, true)
+	draw_polyline(first_crack, ink, 1.1, true)
+	if stage in ["crack_50", "crack_75"]:
+		var upper_extension := PackedVector2Array([
+			Vector2(45, 18 + bob_y), Vector2(48, 15 + bob_y)
+		])
+		var lower_extension := PackedVector2Array([
+			Vector2(45, 24 + bob_y),
+			Vector2(41, 28 + bob_y),
+			Vector2(44, 32 + bob_y)
+		])
+		draw_polyline(upper_extension, cream, 2.5, true)
+		draw_polyline(upper_extension, ink, 1.1, true)
+		draw_polyline(lower_extension, cream, 2.5, true)
+		draw_polyline(lower_extension, ink, 1.1, true)
+	if stage == "crack_75":
+		var second_crack := PackedVector2Array([
+			Vector2(22, 49 + bob_y),
+			Vector2(19, 52 + bob_y),
+			Vector2(22, 55 + bob_y),
+			Vector2(19, 58 + bob_y)
+		])
+		draw_polyline(second_crack, cream, 2.5, true)
+		draw_polyline(second_crack, ink, 1.1, true)
 
 
 func _draw_warmth_sparkles(center: Vector2) -> void:

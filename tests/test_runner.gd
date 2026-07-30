@@ -30,8 +30,8 @@ func _run() -> void:
 	_check(definitions.size() == 3, "se cargan tres CreatureDefinition")
 	_check(state.phase == 0 and not state.all_hatched(), "la partida comienza con tres huevos")
 	for creature_id in TerryGameState.CREATURE_IDS:
-		state.eggs[creature_id]["heat"] = 5.0
-		state.eggs[creature_id]["nutrition"] = 2.0
+		state.eggs[creature_id]["care"] = TerryGameState.EGG_CARE_REQUIRED
+		state.eggs[creature_id]["nutrition"] = TerryGameState.EGG_NUTRITION_REQUIRED
 		state.hatch(creature_id)
 	_check(state.all_hatched(), "los huevos nacen de forma independiente")
 	director.evaluate(state)
@@ -90,15 +90,24 @@ func _run() -> void:
 
 	var test_path := "user://terry_the_egg_test_save.json"
 	_check(saver.save_game(state, test_path), "SaveManager escribe JSON")
+	_check(saver.has_save(test_path), "SaveManager valida una partida continuable")
 	var restored := TerryGameState.new()
 	_check(saver.load_game(restored, test_path), "SaveManager recupera JSON")
 	_check(bool(restored.flags["creature_a_disappeared"]), "la desaparición persiste al cargar")
 	_check(restored.answers.get("dialogue_01_answer") == "who", "las respuestas persisten al cargar")
 	var legacy_data := restored.to_dict()
+	legacy_data["save_version"] = 1
 	for creature_id in TerryGameState.CREATURE_IDS:
+		legacy_data["eggs"][creature_id]["heat"] = 2.5
+		legacy_data["eggs"][creature_id]["heat_required"] = 5.0
+		legacy_data["eggs"][creature_id].erase("care")
+		legacy_data["eggs"][creature_id].erase("care_required")
+		legacy_data["eggs"][creature_id].erase("care_strokes")
+		legacy_data["eggs"][creature_id].erase("next_care_unix")
 		legacy_data["eggs"][creature_id].erase("meal_bites")
 		legacy_data["eggs"][creature_id].erase("next_meal_unix")
-		legacy_data["eggs"][creature_id]["nutrition_required"] = 2.0
+		legacy_data["eggs"][creature_id]["nutrition"] = 7.5
+		legacy_data["eggs"][creature_id]["nutrition_required"] = 15.0
 		legacy_data["creatures"][creature_id].erase("sleep_until_unix")
 		legacy_data["creatures"][creature_id].erase("meal_bites")
 		legacy_data["creatures"][creature_id].erase("next_meal_unix")
@@ -109,6 +118,8 @@ func _run() -> void:
 		migrated.load_dict(legacy_data)
 		and int(migrated.eggs["creature_main"]["nutrition_required"]) == TerryGameState.EGG_NUTRITION_REQUIRED
 		and migrated.eggs["creature_main"].has("next_meal_unix")
+		and migrated.eggs["creature_main"].has("next_care_unix")
+		and int(migrated.eggs["creature_main"]["care"]) == 6
 		and migrated.creatures["creature_main"].has("sleep_until_unix")
 		and migrated.creatures["creature_main"].has("poop_due_unix"),
 		"los guardados antiguos migran a los temporizadores nuevos"
@@ -200,6 +211,8 @@ func _test_integrated_main_flow() -> void:
 	root.add_child(game)
 	await process_frame
 	await process_frame
+	game.save_manager.save_path = "user://terry_the_egg_integration_test_save.json"
+	game.save_manager.delete_save()
 	_check(game.start_backdrop.visible, "al arrancar aparece el menú de continuar o empezar de cero")
 	game._show_exit_menu()
 	_check(game.exit_backdrop.visible, "cerrar abre el menú con guardar y salir")
@@ -212,14 +225,14 @@ func _test_integrated_main_flow() -> void:
 	var labels_fit := true
 	for action_id in game.action_buttons:
 		var button: Button = game.action_buttons[action_id]
-		var caption_panel: Panel = button.get_node("CaptionPanel")
-		var caption: Label = caption_panel.get_node("Caption")
+		var action_name: Label = button.get_node("ActionName")
 		labels_fit = (
 			labels_fit
-			and caption_panel.position.y + caption_panel.size.y <= button.size.y
-			and caption.get_minimum_size().x <= caption_panel.size.x
+			and action_name.position.y + action_name.size.y <= button.size.y
+			and action_name.get_minimum_size().x <= action_name.size.x
 		)
 	_check(labels_fit, "los nombres quedan centrados dentro de sus botones")
+	_check(game.theme.default_font.resource_path.ends_with("PixelifySans-Variable.ttf"), "todo el HUD usa la tipografía retro nueva")
 	var phase_hint_visible := false
 	for visible_label in game.find_children("*", "Label", true, false):
 		if visible_label.is_visible_in_tree() and str(visible_label.text).begins_with("FASE"):
@@ -231,7 +244,28 @@ func _test_integrated_main_flow() -> void:
 	feed_release.button_index = MOUSE_BUTTON_LEFT
 	feed_release.pressed = false
 	feed_release.position = Vector2(32, 42)
-	game.game_state.eggs["creature_main"]["heat"] = game.game_state.eggs["creature_main"]["heat_required"]
+	_check(game.egg_nodes["creature_main"].bubble.current_symbol == "pet_request", "el huevo comienza pidiendo mimos con el icono del cursor")
+	for _care in TerryGameState.EGG_CARE_CAPACITY:
+		game._on_egg_rubbed("creature_main")
+	var main_egg: Dictionary = game.game_state.eggs["creature_main"]
+	_check(
+		int(main_egg["care"]) == 3
+		and str(main_egg["visual_state"]) == "crack_25"
+		and int(main_egg["next_care_unix"]) > int(Time.get_unix_time_from_system()),
+		"la primera tanda de mimos crea la grieta del 25 por ciento"
+	)
+	var saved_session := TerryGameState.new()
+	_check(
+		game._save_current_game()
+		and game.save_manager.load_game(saved_session)
+		and int(saved_session.eggs["creature_main"]["care"]) == 3,
+		"guardar y salir conserva el progreso real del huevo"
+	)
+	game._show_start_menu()
+	_check(not game.continue_button.disabled, "una partida guardada habilita Continuar al volver a abrir el juego")
+	game.start_backdrop.hide()
+	var heart_texture: AtlasTexture = game.egg_nodes["creature_main"].bubble.icon.texture
+	_check(heart_texture.atlas.resource_path.ends_with("expression-symbols.png"), "los corazones usan la nueva hoja de expresiones")
 	for _feeding in 2:
 		game._on_action_button("food")
 		game.egg_nodes["creature_main"]._on_gui_input(feed_release)
@@ -243,7 +277,7 @@ func _test_integrated_main_flow() -> void:
 	)
 	_check(
 		"TOTAL" not in game.status_label.text
-		and "/15" not in game.status_label.text
+		and "/12" not in game.status_label.text
 		and "2/2" not in game.status_label.text,
 		"la interfaz oculta las cantidades de incubación"
 	)
@@ -255,18 +289,39 @@ func _test_integrated_main_flow() -> void:
 		and game.egg_nodes["creature_main"].bubble.current_symbol == "no",
 		"una tercera comida antes de una hora se rechaza con una X"
 	)
-	while float(game.game_state.eggs["creature_main"]["nutrition"]) < float(TerryGameState.EGG_NUTRITION_REQUIRED):
-		if not game._egg_can_accept_food("creature_main"):
-			game.game_state.eggs["creature_main"]["next_meal_unix"] = int(Time.get_unix_time_from_system()) - 1
-			game._update_egg_meal_requests(false)
+	_check("NO TIENE MÁS HAMBRE" in game.status_label.text, "el rechazo de comida utiliza un mensaje amable")
+	main_egg["next_care_unix"] = int(Time.get_unix_time_from_system()) - 1
+	game.egg_nodes["creature_main"].bubble.clear()
+	game._update_egg_requests(false)
+	_check(game.egg_nodes["creature_main"].bubble.current_symbol == "pet_request", "tras cinco minutos vuelve a pedir mimos")
+	var request_texture: AtlasTexture = game.egg_nodes["creature_main"].bubble.icon.texture
+	_check(request_texture.atlas.resource_path.ends_with("tool-cursors.png"), "el aviso de mimos reutiliza exactamente el arte del cursor")
+	for _care_round in 2:
+		for _care in TerryGameState.EGG_CARE_CAPACITY:
+			game._on_egg_rubbed("creature_main")
+		if _care_round == 0:
+			_check(str(main_egg["visual_state"]) == "crack_50", "la segunda tanda crea una grieta mayor al 50 por ciento")
+		main_egg["next_care_unix"] = int(Time.get_unix_time_from_system()) - 1
+		game._update_egg_requests(false)
+	_check(
+		int(main_egg["care"]) == 9 and str(main_egg["visual_state"]) == "crack_75",
+		"la tercera tanda añade otra grieta al 75 por ciento"
+	)
+	main_egg["next_meal_unix"] = int(Time.get_unix_time_from_system()) - 1
+	game._update_egg_requests(false)
+	for _feeding in 2:
 		game._on_action_button("food")
 		game.egg_nodes["creature_main"]._on_gui_input(feed_release)
 		await process_frame
+	main_egg["next_care_unix"] = int(Time.get_unix_time_from_system()) - 1
+	game._update_egg_requests(false)
+	for _care in TerryGameState.EGG_CARE_CAPACITY:
+		game._on_egg_rubbed("creature_main")
 	await create_timer(1.0).timeout
 	_check(
 		bool(game.game_state.eggs["creature_main"]["hatched"])
 		and game.creature_nodes.has("creature_main"),
-		"el huevo eclosiona al completar quince comidas en tandas horarias"
+		"el huevo eclosiona tras dos rondas de néctar y cuatro tandas de mimos"
 	)
 	game.game_state.reset_all()
 	game._sync_from_state()
