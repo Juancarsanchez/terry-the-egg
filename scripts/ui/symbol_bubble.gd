@@ -12,6 +12,7 @@ const GLYPHS := {
 	"no": "X",
 	"full": "OK",
 	"pet": "<3",
+	"warmth": "",
 	"question": "?",
 	"exclamation": "!",
 	"ellipsis": "...",
@@ -65,6 +66,7 @@ func show_symbol(symbol_id: String, duration: float = 2.0, priority: int = 10, k
 	persistent = keep
 	sequence_duration = maxf(0.05, sequence_duration)
 	label.text = str(GLYPHS.get(symbol_id, symbol_id))
+	label.visible = symbol_id not in ["heart", "empty_heart", "warmth"]
 	show()
 	queue_redraw()
 	return true
@@ -106,3 +108,54 @@ func _draw() -> void:
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(13, 17), Vector2(19, 17), Vector2(16, 22)
 	]), Color("#4C4053"))
+	if current_symbol == "warmth":
+		_draw_warmth()
+	elif current_symbol == "heart":
+		_draw_pastel_heart(false)
+	elif current_symbol == "empty_heart":
+		_draw_pastel_heart(true)
+
+
+func _draw_warmth() -> void:
+	var center := Vector2(16, 9)
+	var outline := Color("#4C4053")
+	var gold := Color("#F4C452")
+	var cream := Color("#FFF3DE")
+	var outer := PackedVector2Array([
+		center + Vector2(0, -7),
+		center + Vector2(2, -2),
+		center + Vector2(7, 0),
+		center + Vector2(2, 2),
+		center + Vector2(0, 7),
+		center + Vector2(-2, 2),
+		center + Vector2(-7, 0),
+		center + Vector2(-2, -2)
+	])
+	var inner := PackedVector2Array([
+		center + Vector2(0, -5),
+		center + Vector2(1.5, -1.5),
+		center + Vector2(5, 0),
+		center + Vector2(1.5, 1.5),
+		center + Vector2(0, 5),
+		center + Vector2(-1.5, 1.5),
+		center + Vector2(-5, 0),
+		center + Vector2(-1.5, -1.5)
+	])
+	draw_colored_polygon(outer, outline)
+	draw_colored_polygon(inner, gold)
+	draw_circle(center, 1.5, cream)
+
+
+func _draw_pastel_heart(empty: bool) -> void:
+	var outline := Color("#4C4053")
+	var fill := Color("#F49A8F") if not empty else Color("#FFF3DE")
+	draw_circle(Vector2(12, 7), 5, outline)
+	draw_circle(Vector2(20, 7), 5, outline)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(7, 8), Vector2(25, 8), Vector2(16, 17)
+	]), outline)
+	draw_circle(Vector2(12, 7), 3.3, fill)
+	draw_circle(Vector2(20, 7), 3.3, fill)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(9, 8), Vector2(23, 8), Vector2(16, 14.5)
+	]), fill)

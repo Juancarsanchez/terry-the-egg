@@ -95,7 +95,7 @@ func _on_gui_input(event: InputEvent) -> void:
 			_gesture_distance = 0.0
 			_care_flash = 0.35
 			rubbed.emit(creature_id)
-			bubble.show_symbol("heart", 0.5, 70)
+			bubble.show_symbol("warmth", 0.5, 70)
 		_last_direction = direction
 
 
@@ -115,12 +115,7 @@ func _draw() -> void:
 		draw_arc(center, 28 + pulse, 0, TAU, 32, Color("#F4C452"), 2.0)
 		draw_arc(center, 31 + pulse, 0, TAU, 32, Color(1, 0.96, 0.72, 0.65), 1.0)
 	elif _hovered and cursor_manager != null and cursor_manager.selected_tool == "":
-		draw_line(Vector2(10, 72), Vector2(24, 72), Color("#4C4053"), 1.0)
-		draw_line(Vector2(40, 72), Vector2(54, 72), Color("#4C4053"), 1.0)
-		draw_line(Vector2(10, 72), Vector2(14, 69), Color("#4C4053"), 1.0)
-		draw_line(Vector2(10, 72), Vector2(14, 75), Color("#4C4053"), 1.0)
-		draw_line(Vector2(54, 72), Vector2(50, 69), Color("#4C4053"), 1.0)
-		draw_line(Vector2(54, 72), Vector2(50, 75), Color("#4C4053"), 1.0)
+		_draw_rub_guides()
 
 	if visual_state == "open":
 		draw_arc(center + Vector2(0, 12), 22, 0, PI, 20, Color("#4C4053"), 3.0)
@@ -141,7 +136,7 @@ func _draw() -> void:
 	var source := Rect2(120 + column * 432, row * 512, 432, 512)
 	draw_texture_rect_region(EGG_SHEET, Rect2(0, bob_y, 64, 78), source)
 	if _care_flash > 0.0:
-		draw_arc(center, 25, PI * 1.1, PI * 1.9, 12, Color("#F26F62"), 2.0)
+		_draw_warmth_sparkles(center)
 	if _click_flash > 0.0:
 		_draw_click_flash(center)
 
@@ -152,6 +147,56 @@ func _draw_ellipse_shape(center: Vector2, radius: Vector2, color: Color) -> void
 		var angle := TAU * float(i) / 32.0
 		points.append(center + Vector2(cos(angle) * radius.x, sin(angle) * radius.y))
 	draw_colored_polygon(points, color)
+
+
+func _draw_rub_guides() -> void:
+	var drift := sin(_bob * 4.0) * 1.2
+	var cream := Color("#FFF3DE")
+	var gold := Color("#F4C452")
+	var left_tip := Vector2(-4 + drift, 50)
+	var left_base := Vector2(9 + drift, 50)
+	var right_tip := Vector2(68 - drift, 50)
+	var right_base := Vector2(55 - drift, 50)
+	draw_line(left_base, left_tip + Vector2(2, 0), cream, 5.0, true)
+	draw_line(left_base, left_tip + Vector2(2, 0), gold, 2.0, true)
+	draw_colored_polygon(PackedVector2Array([
+		left_tip, left_tip + Vector2(7, -6), left_tip + Vector2(7, 6)
+	]), cream)
+	draw_colored_polygon(PackedVector2Array([
+		left_tip + Vector2(1, 0), left_tip + Vector2(6, -4), left_tip + Vector2(6, 4)
+	]), gold)
+	draw_line(right_base, right_tip - Vector2(2, 0), cream, 5.0, true)
+	draw_line(right_base, right_tip - Vector2(2, 0), gold, 2.0, true)
+	draw_colored_polygon(PackedVector2Array([
+		right_tip, right_tip + Vector2(-7, -6), right_tip + Vector2(-7, 6)
+	]), cream)
+	draw_colored_polygon(PackedVector2Array([
+		right_tip + Vector2(-1, 0), right_tip + Vector2(-6, -4), right_tip + Vector2(-6, 4)
+	]), gold)
+
+
+func _draw_warmth_sparkles(center: Vector2) -> void:
+	var strength := clampf(_care_flash / 0.35, 0.0, 1.0)
+	var glow := Color(1.0, 0.78, 0.28, strength)
+	var cream := Color(1.0, 0.95, 0.78, strength)
+	for data in [
+		[center + Vector2(-25, -15), 4.0],
+		[center + Vector2(25, -12), 3.5],
+		[center + Vector2(0, -31), 3.0]
+	]:
+		var point: Vector2 = data[0]
+		var radius: float = data[1]
+		draw_colored_polygon(PackedVector2Array([
+			point + Vector2(0, -radius),
+			point + Vector2(radius * 0.45, -radius * 0.45),
+			point + Vector2(radius, 0),
+			point + Vector2(radius * 0.45, radius * 0.45),
+			point + Vector2(0, radius),
+			point + Vector2(-radius * 0.45, radius * 0.45),
+			point + Vector2(-radius, 0),
+			point + Vector2(-radius * 0.45, -radius * 0.45)
+		]), glow)
+		draw_circle(point, radius * 0.35, cream)
 
 
 func _draw_click_flash(center: Vector2) -> void:

@@ -213,8 +213,18 @@ func _test_integrated_main_flow() -> void:
 	for action_id in game.action_buttons:
 		var button: Button = game.action_buttons[action_id]
 		var caption_panel: Panel = button.get_node("CaptionPanel")
-		labels_fit = labels_fit and caption_panel.position.y + caption_panel.size.y <= button.size.y
+		var caption: Label = caption_panel.get_node("Caption")
+		labels_fit = (
+			labels_fit
+			and caption_panel.position.y + caption_panel.size.y <= button.size.y
+			and caption.get_minimum_size().x <= caption_panel.size.x
+		)
 	_check(labels_fit, "los nombres quedan centrados dentro de sus botones")
+	var phase_hint_visible := false
+	for visible_label in game.find_children("*", "Label", true, false):
+		if visible_label.is_visible_in_tree() and str(visible_label.text).begins_with("FASE"):
+			phase_hint_visible = true
+	_check(not phase_hint_visible, "la pantalla no revela la fase actual")
 	game._on_button_press_feedback(game.action_buttons["food"])
 	_check(game.action_buttons["food"].scale.x < 1.0, "los botones responden visualmente al pulsarlos")
 	var feed_release := InputEventMouseButton.new()
@@ -265,7 +275,7 @@ func _test_integrated_main_flow() -> void:
 	await process_frame
 	_check(game.creature_nodes.size() == 3, "la escena sustituye huevos por tres criaturas diferentes")
 	var creature_food_icon: AtlasTexture = game.action_icons["food"].texture
-	_check(creature_food_icon.atlas.resource_path.ends_with("care-icons.png"), "las criaturas recuperan el icono de cuenco")
+	_check(creature_food_icon.atlas.resource_path.ends_with("tool-cursors.png"), "las criaturas recuperan el icono de cuenco")
 	game.game_state.creatures["creature_a"]["needs"]["satiety"] = 30.0
 	for _feeding in 2:
 		game.cursor_manager.select_tool("food")

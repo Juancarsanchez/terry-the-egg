@@ -15,7 +15,6 @@ const LCD := Color("#CDE6B8")
 const LCD_DARK := Color("#A7CB99")
 const WALLPAPER := Color("#8EC8C4")
 const ENTITY_POSITIONS := [Vector2(10, 24), Vector2(94, 24), Vector2(178, 24)]
-const ICON_SHEET := "res://assets/ui/care-icons.png"
 const TOOL_CURSOR_SHEET := "res://assets/ui/tool-cursors.png"
 const TOOL_CELL_SIZE := 418
 
@@ -33,7 +32,6 @@ var audio_manager: AudioManager
 var arena: Control
 var status_panel: Panel
 var status_label: Label
-var phase_label: Label
 var tool_label: Label
 var action_buttons: Dictionary = {}
 var action_icons: Dictionary = {}
@@ -160,10 +158,8 @@ func _build_interface() -> void:
 	screen_surface.add_theme_stylebox_override("panel", _stylebox(LCD, LCD_DARK, 2, 7))
 	screen_frame.add_child(screen_surface)
 
-	phase_label = _make_label("", Vector2(7, 4), Vector2(148, 13), 7)
-	phase_label.add_theme_color_override("font_color", INK)
-	screen_surface.add_child(phase_label)
-	tool_label = _make_label("ACARICIAR", Vector2(151, 4), Vector2(104, 13), 7)
+	tool_label = _make_label("ACARICIAR", Vector2(7, 4), Vector2(248, 13), 7)
+	tool_label.name = "ToolLabel"
 	tool_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	tool_label.add_theme_color_override("font_color", INK)
 	screen_surface.add_child(tool_label)
@@ -424,7 +420,6 @@ func _save_and_quit() -> void:
 
 
 func _sync_from_state() -> void:
-	phase_label.text = "FASE %d · %s" % [game_state.phase, _phase_name(game_state.phase)]
 	special_button.visible = "show_player_place" in game_state.unlocks and not bool(game_state.flags.get("player_place_shown", false))
 	for creature_id in TerryGameState.CREATURE_IDS:
 		var index := TerryGameState.CREATURE_IDS.find(creature_id)
@@ -1169,12 +1164,12 @@ func _make_action_button(action_id: String, label_text: String, at: Vector2) -> 
 	button.add_child(icon)
 	var caption_panel := Panel.new()
 	caption_panel.name = "CaptionPanel"
-	caption_panel.position = Vector2(3, 25)
-	caption_panel.size = Vector2(40, 10)
+	caption_panel.position = Vector2(2, 24)
+	caption_panel.size = Vector2(42, 11)
 	caption_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	caption_panel.add_theme_stylebox_override("panel", _stylebox(Color("#FFF3DE"), Color(0.3, 0.25, 0.32, 0.45), 1, 5))
 	button.add_child(caption_panel)
-	var caption := _make_label(label_text, Vector2(0, -3), Vector2(40, 11), 5)
+	var caption := _make_label(label_text, Vector2(0, -3), Vector2(42, 11), 4)
 	caption.name = "Caption"
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -1185,19 +1180,7 @@ func _make_action_button(action_id: String, label_text: String, at: Vector2) -> 
 
 
 func _icon_texture(action_id: String) -> AtlasTexture:
-	var cells := {
-		"food": Vector2i(0, 0),
-		"pet": Vector2i(1, 0),
-		"play": Vector2i(2, 0),
-		"sleep": Vector2i(0, 1),
-		"clean": Vector2i(1, 1),
-		"status": Vector2i(2, 1)
-	}
-	var cell: Vector2i = cells.get(action_id, Vector2i.ZERO)
-	var atlas := AtlasTexture.new()
-	atlas.atlas = load(ICON_SHEET)
-	atlas.region = Rect2(cell.x * 512, cell.y * 512, 512, 512)
-	return atlas
+	return _tool_texture(action_id)
 
 
 func _tool_texture(tool_id: String) -> AtlasTexture:
