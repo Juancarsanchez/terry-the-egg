@@ -915,10 +915,21 @@ func _on_egg_rubbed(creature_id: String) -> void:
 	var egg: Dictionary = game_state.eggs[creature_id]
 	var display_name: String = str(definitions[creature_id].display_name).to_upper()
 	if not _egg_can_accept_care(creature_id):
+		var waiting_for_nectar := (
+			float(egg["care"]) >= float(_egg_care_gate(egg))
+			and float(egg["care"]) < float(egg["care_required"])
+			and _egg_can_accept_food(creature_id)
+		)
 		if egg_nodes.has(creature_id):
-			egg_nodes[creature_id].bubble.show_symbol("ellipsis", 1.0, 80)
-		if float(egg["care"]) >= float(_egg_care_gate(egg)) and float(egg["care"]) < float(egg["care_required"]):
+			egg_nodes[creature_id].bubble.show_symbol(
+				"egg_food" if waiting_for_nectar else "ellipsis",
+				1.0,
+				80
+			)
+		if waiting_for_nectar:
 			status_label.text = "%s QUIERE UN POQUITO DE NÉCTAR ANTES DE SEGUIR CON LOS MIMOS." % display_name
+		elif float(egg["care"]) >= float(_egg_care_gate(egg)) and float(egg["care"]) < float(egg["care_required"]):
+			status_label.text = "%s TODAVÍA ESTÁ SATISFECHO. QUIERE DESCANSAR UN POQUITO ANTES DE SEGUIR." % display_name
 		else:
 			status_label.text = "%s ESTÁ DESCANSANDO DE TANTOS MIMOS." % display_name
 		return
@@ -2003,7 +2014,7 @@ func _make_action_button(action_id: String, label_text: String, at: Vector2) -> 
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(icon)
-	var action_name := _make_label(label_text, Vector2.ZERO, Vector2.ZERO, 5)
+	var action_name := _make_label(label_text, Vector2.ZERO, Vector2.ZERO, 6)
 	action_name.name = "ActionName"
 	action_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	action_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

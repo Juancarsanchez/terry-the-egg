@@ -240,14 +240,43 @@ func _test_mouse_gestures() -> void:
 		"los parpados se dibujan sobre los ojos y no encima de las orejas"
 	)
 	creature.react("play")
-	_check(creature._sprite_row() == 1, "jugar utiliza la pose con el brazo levantado")
+	_check(creature._current_pose() == "play", "jugar utiliza la pose con el brazo levantado")
 	creature.react("eat")
-	_check(creature._sprite_row() == 2, "comer utiliza la pose de mandíbula abierta")
+	_check(creature._current_pose() == "eat", "comer utiliza la pose de mandíbula abierta")
 	creature.set_sleeping(true)
-	_check(creature.state_name == "sleep" and creature._eye_expression() == "normal", "dormir usa un asset completo sin ojos superpuestos")
+	_check(
+		creature.state_name == "sleep"
+		and creature._eye_expression() == "normal"
+		and CreatureController.texture_for_pose("creature_main", "sleep").resource_path.ends_with("terry/sleep.png"),
+		"dormir usa un asset completo sin ojos superpuestos"
+	)
 	creature.set_sleeping(false)
 	creature.react("refuse")
-	_check(creature.state_name == "refuse", "la negativa activa su pose propia")
+	_check(
+		creature.state_name == "refuse"
+		and CreatureController.texture_for_pose("creature_main", "refuse").resource_path.ends_with("terry/refuse.png"),
+		"la negativa activa su pose propia"
+	)
+	var creature_pose_paths := {}
+	for creature_id in ["creature_a", "creature_b", "creature_main"]:
+		for pose in ["idle", "play", "eat", "sleep", "refuse"]:
+			creature_pose_paths[CreatureController.texture_for_pose(creature_id, pose).resource_path] = true
+	_check(creature_pose_paths.size() == 15, "cada criatura y pose usa su propio PNG sin regiones vecinas")
+	var creature_tops_are_clean := true
+	for creature_id in ["creature_a", "creature_b", "creature_main"]:
+		for pose in ["play", "eat"]:
+			var pose_image := CreatureController.texture_for_pose(creature_id, pose).get_image()
+			var clean_rows := 22 if pose == "play" else 19
+			for y in clean_rows:
+				for x in range(0, pose_image.get_width(), 2):
+					if pose_image.get_pixel(x, y).a > 0.0:
+						creature_tops_are_clean = false
+	_check(creature_tops_are_clean, "las poses no conservan restos de la celda anterior sobre las orejas")
+	_check(
+		not FileAccess.file_exists("res://assets/creatures/creature-sprites.png")
+		and not FileAccess.file_exists("res://assets/creatures/creature-reactions.png"),
+		"las hojas de sprites que producían contaminación entre celdas ya no existen"
+	)
 	egg.queue_free()
 	creature.queue_free()
 	manager.queue_free()
@@ -278,13 +307,17 @@ func _test_integrated_main_flow() -> void:
 			labels_fit
 			and action_name.position.y + action_name.size.y <= button.size.y
 			and action_name.get_minimum_size().x <= action_name.size.x
+			and action_name.get_theme_font_size("font_size") >= 6
 		)
 	_check(labels_fit, "los nombres quedan centrados dentro de sus botones")
 	_check(game.theme.default_font.resource_path.ends_with("PixelifySans-Variable.ttf"), "todo el HUD usa la tipografía retro nueva")
 	_check(
-		game.theme.default_font.multichannel_signed_distance_field
-		and int(game.theme.default_font.subpixel_positioning) == 0,
-		"la tipografia conserva nitidez al redimensionar la ventana"
+		not game.theme.default_font.multichannel_signed_distance_field
+		and int(game.theme.default_font.antialiasing) == 0
+		and int(game.theme.default_font.subpixel_positioning) == 0
+		and ProjectSettings.get_setting("display/window/stretch/mode") == "viewport"
+		and ProjectSettings.get_setting("display/window/stretch/scale_mode") == "integer",
+		"la tipografia se rasteriza una vez y escala en píxeles enteros"
 	)
 	var phase_hint_visible := false
 	for visible_label in game.find_children("*", "Label", true, false):
@@ -360,9 +393,30 @@ func _test_integrated_main_flow() -> void:
 		int(main_egg["care"]) == 9 and str(main_egg["visual_state"]) == "crack_75",
 		"la tercera tanda añade otra grieta al 75 por ciento"
 	)
+	game._on_egg_rubbed("creature_main")
+	_check(
+		not game._egg_can_accept_food("creature_main")
+		and "NÉCTAR" not in game.status_label.text,
+		"el huevo no pide néctar mientras todavía está lleno"
+	)
 	main_egg["next_meal_unix"] = int(Time.get_unix_time_from_system()) - 1
+	await create_timer(1.05).timeout
 	game._update_egg_requests(false)
-	for _feeding in 2:
+	_check(
+		game._egg_can_accept_food("creature_main")
+		and game.egg_nodes["creature_main"].bubble.current_symbol == "egg_food",
+		"el aviso de néctar solo aparece cuando el huevo puede aceptarlo"
+	)
+	var nutrition_before_requested_feed := int(main_egg["nutrition"])
+	game._on_action_button("food")
+	game.egg_nodes["creature_main"]._on_gui_input(feed_release)
+	await process_frame
+	_check(
+		int(main_egg["nutrition"]) == nutrition_before_requested_feed + 1
+		and game.egg_nodes["creature_main"].bubble.current_symbol != "no",
+		"el néctar solicitado se acepta en la siguiente entrega"
+	)
+	for _feeding in 1:
 		game._on_action_button("food")
 		game.egg_nodes["creature_main"]._on_gui_input(feed_release)
 		await process_frame
@@ -590,9 +644,28 @@ func _test_story_reconstruction_helpers() -> void:
 	_check(
 		int(game.game_state.eggs["creature_main"]["care"]) == 3
 		and str(game.game_state.eggs["creature_main"]["visual_state"]) == "crack_25"
-		and EggController.EGG_SHEET.resource_path.ends_with("egg-stage-sprites.png"),
-		"la primera grieta usa un estado rasterizado de la hoja nueva"
+		and EggController.texture_for_state("creature_main", "crack_25").resource_path.ends_with("terry/break-25.png"),
+		"la primera rotura usa un sprite completo e independiente"
 	)
+	_check(
+		not FileAccess.file_exists("res://assets/eggs/egg-stage-sprites-v2.png"),
+		"la hoja antigua de grietas superpuestas ya no existe"
+	)
+	var egg_art_stays_inside := true
+	var egg_art_paths := {}
+	for creature_id in ["creature_a", "creature_b", "creature_main"]:
+		var intact_texture := EggController.texture_for_state(creature_id, "intact")
+		var intact_image := intact_texture.get_image()
+		for state in ["intact", "crack_25", "crack_50", "crack_75", "hatching"]:
+			var state_texture := EggController.texture_for_state(creature_id, state)
+			egg_art_paths[state_texture.resource_path] = true
+			var state_image := state_texture.get_image()
+			for y in range(0, state_image.get_height(), 4):
+				for x in range(0, state_image.get_width(), 4):
+					if state_image.get_pixel(x, y).a > intact_image.get_pixel(x, y).a + 0.01:
+						egg_art_stays_inside = false
+	_check(egg_art_paths.size() == 15, "cada criatura y grado de rotura usa su propio PNG completo")
+	_check(egg_art_stays_inside, "ningún estado de rotura dibuja píxeles fuera de la silueta del huevo")
 	game._jump_to_story_moment("crack_75")
 	await process_frame
 	_check(str(game.game_state.eggs["creature_main"]["visual_state"]) == "crack_75", "el navegador permite revisar el huevo casi listo")

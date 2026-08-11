@@ -5,7 +5,29 @@ signal rubbed(creature_id: String)
 signal feed_dropped(creature_id: String)
 signal hover_changed(kind: String, entered: bool)
 
-const EGG_SHEET: Texture2D = preload("res://assets/eggs/egg-stage-sprites.png")
+const EGG_TEXTURES := {
+	"creature_a": {
+		"intact": preload("res://assets/eggs/states/pipo/intact.png"),
+		"crack_25": preload("res://assets/eggs/states/pipo/break-25.png"),
+		"crack_50": preload("res://assets/eggs/states/pipo/break-50.png"),
+		"crack_75": preload("res://assets/eggs/states/pipo/break-75.png"),
+		"hatching": preload("res://assets/eggs/states/pipo/hatching.png")
+	},
+	"creature_b": {
+		"intact": preload("res://assets/eggs/states/mota/intact.png"),
+		"crack_25": preload("res://assets/eggs/states/mota/break-25.png"),
+		"crack_50": preload("res://assets/eggs/states/mota/break-50.png"),
+		"crack_75": preload("res://assets/eggs/states/mota/break-75.png"),
+		"hatching": preload("res://assets/eggs/states/mota/hatching.png")
+	},
+	"creature_main": {
+		"intact": preload("res://assets/eggs/states/terry/intact.png"),
+		"crack_25": preload("res://assets/eggs/states/terry/break-25.png"),
+		"crack_50": preload("res://assets/eggs/states/terry/break-50.png"),
+		"crack_75": preload("res://assets/eggs/states/terry/break-75.png"),
+		"hatching": preload("res://assets/eggs/states/terry/hatching.png")
+	}
+}
 
 var creature_id := ""
 var tint := Color.WHITE
@@ -110,6 +132,11 @@ func show_care_feedback(symbol_id: String = "heart") -> void:
 	queue_redraw()
 
 
+static func texture_for_state(id: String, state: String) -> Texture2D:
+	var creature_textures: Dictionary = EGG_TEXTURES.get(id, EGG_TEXTURES["creature_main"])
+	return creature_textures.get(state, creature_textures["intact"]) as Texture2D
+
+
 func _draw() -> void:
 	var bob_y := sin(_bob * 2.0) if visual_state == "intact" else 0.0
 	var center := Vector2(32, 43 + bob_y)
@@ -128,22 +155,8 @@ func _draw() -> void:
 		]), tint.lightened(0.1))
 		return
 
-	var column := 0
-	match creature_id:
-		"creature_b":
-			column = 1
-		"creature_main":
-			column = 2
-	var rows := {
-		"intact": 0,
-		"crack_25": 1,
-		"crack_50": 2,
-		"crack_75": 3,
-		"hatching": 4
-	}
-	var row: int = int(rows.get(visual_state, 0))
-	var source := Rect2(column * 432, row * 512, 432, 512)
-	draw_texture_rect_region(EGG_SHEET, Rect2(0, bob_y, 64, 78), source)
+	var egg_texture := texture_for_state(creature_id, visual_state)
+	draw_texture_rect(egg_texture, Rect2(0, bob_y, 64, 78), false)
 	if _care_flash > 0.0:
 		_draw_warmth_sparkles(center)
 	if _click_flash > 0.0:

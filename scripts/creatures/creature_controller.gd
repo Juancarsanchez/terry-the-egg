@@ -4,11 +4,31 @@ extends Control
 signal action_requested(creature_id: String, action: String)
 signal hover_changed(kind: String, entered: bool)
 
-const CREATURE_SHEET: Texture2D = preload("res://assets/creatures/creature-sprites.png")
-const REACTION_SHEET: Texture2D = preload("res://assets/creatures/creature-reactions.png")
 const PIPO_CHUBBY: Texture2D = preload("res://assets/creatures/pipo-chubby.png")
+const CREATURE_TEXTURES := {
+	"creature_a": {
+		"idle": preload("res://assets/creatures/states/pipo/idle.png"),
+		"play": preload("res://assets/creatures/states/pipo/play.png"),
+		"eat": preload("res://assets/creatures/states/pipo/eat.png"),
+		"sleep": preload("res://assets/creatures/states/pipo/sleep.png"),
+		"refuse": preload("res://assets/creatures/states/pipo/refuse.png")
+	},
+	"creature_b": {
+		"idle": preload("res://assets/creatures/states/mota/idle.png"),
+		"play": preload("res://assets/creatures/states/mota/play.png"),
+		"eat": preload("res://assets/creatures/states/mota/eat.png"),
+		"sleep": preload("res://assets/creatures/states/mota/sleep.png"),
+		"refuse": preload("res://assets/creatures/states/mota/refuse.png")
+	},
+	"creature_main": {
+		"idle": preload("res://assets/creatures/states/terry/idle.png"),
+		"play": preload("res://assets/creatures/states/terry/play.png"),
+		"eat": preload("res://assets/creatures/states/terry/eat.png"),
+		"sleep": preload("res://assets/creatures/states/terry/sleep.png"),
+		"refuse": preload("res://assets/creatures/states/terry/refuse.png")
+	}
+}
 const SPRITE_CELL_SIZE := 418.0
-const REACTION_ROW_HEIGHT := 460.0
 const LEFT_EYE_ANCHOR := Vector2(198.0 / SPRITE_CELL_SIZE, 200.0 / SPRITE_CELL_SIZE)
 const RIGHT_EYE_ANCHOR := Vector2(289.0 / SPRITE_CELL_SIZE, 200.0 / SPRITE_CELL_SIZE)
 const INK := Color("#4C4053")
@@ -141,62 +161,47 @@ func set_body_state(value: String) -> void:
 	queue_redraw()
 
 
+static func texture_for_pose(id: String, pose: String) -> Texture2D:
+	var creature_textures: Dictionary = CREATURE_TEXTURES.get(id, CREATURE_TEXTURES["creature_main"])
+	return creature_textures.get(pose, creature_textures["idle"]) as Texture2D
+
+
 func _draw() -> void:
-	var bob := 0.0 if sleeping else sin(_animation_time * 3.0) * 1.5
+	var bob := 0.0 if sleeping else roundf(sin(_animation_time * 3.0) * 1.5)
 	var sprite_rect := Rect2(1, 7 + bob, 62, 62)
 	if sleeping:
 		sprite_rect.position.y += 5
 		sprite_rect.size.y -= 3
 	var center := Vector2(32, sprite_rect.end.y - 4)
 	draw_body_ellipse(center, Vector2(24, 4), Color(0.18, 0.24, 0.17, 0.18))
-	var texture := CREATURE_SHEET
-	var source := Rect2(
-		_sprite_column() * SPRITE_CELL_SIZE,
-		_sprite_row() * SPRITE_CELL_SIZE,
-		SPRITE_CELL_SIZE,
-		SPRITE_CELL_SIZE
-	)
+	var pose := _current_pose()
+	var texture := texture_for_pose(definition.creature_id, pose)
 	var uses_chubby_asset := (
 		definition.creature_id == "creature_a"
 		and body_state == "chubby"
 		and not sleeping
 		and state_name not in ["play", "eat", "refuse"]
 	)
-	var uses_reaction_asset := sleeping or state_name == "refuse"
+	var uses_complete_expression_asset := pose in ["sleep", "refuse"]
 	if uses_chubby_asset:
 		texture = PIPO_CHUBBY
-		source = Rect2(Vector2.ZERO, PIPO_CHUBBY.get_size())
-	if uses_reaction_asset:
-		texture = REACTION_SHEET
-		var reaction_y := 125.0 if sleeping else 600.0
-		source = Rect2(
-			_sprite_column() * SPRITE_CELL_SIZE,
-			reaction_y,
-			SPRITE_CELL_SIZE,
-			REACTION_ROW_HEIGHT
-		)
-	draw_texture_rect_region(texture, sprite_rect, source)
-	if not uses_reaction_asset and not uses_chubby_asset:
+	draw_texture_rect(texture, sprite_rect, false)
+	if not uses_complete_expression_asset and not uses_chubby_asset:
 		_draw_eye_expression(sprite_rect)
 	if _click_flash > 0.0:
 		_draw_click_flash(Vector2(32, 39 + bob))
 
 
-func _sprite_column() -> int:
-	match definition.creature_id:
-		"creature_b":
-			return 1
-		"creature_main":
-			return 2
-	return 0
-
-
-func _sprite_row() -> int:
+func _current_pose() -> String:
+	if sleeping:
+		return "sleep"
+	if state_name == "refuse":
+		return "refuse"
 	if state_name == "play":
-		return 1
+		return "play"
 	if state_name == "eat":
-		return 2
-	return 0
+		return "eat"
+	return "idle"
 
 
 func _draw_eye_expression(sprite_rect: Rect2) -> void:
