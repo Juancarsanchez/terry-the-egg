@@ -2,18 +2,18 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://ce1geqy70dxjb"
-path="res://.godot/imported/PixelifySans-Variable.ttf-96dd0ac6b825cd5fd8f5a02f44e7ef61.fontdata"
+uid="uid://dh7py8cgm8irv"
+path="res://.godot/imported/Silkscreen-Regular.ttf-0088f200f2f1c02c371962cb8d277333.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/PixelifySans-Variable.ttf"
-dest_files=["res://.godot/imported/PixelifySans-Variable.ttf-96dd0ac6b825cd5fd8f5a02f44e7ef61.fontdata"]
+source_file="res://assets/fonts/Silkscreen-Regular.ttf"
+dest_files=["res://.godot/imported/Silkscreen-Regular.ttf-0088f200f2f1c02c371962cb8d277333.fontdata"]
 
 [params]
 
 Rendering=null
-antialiasing=0
+antialiasing=1
 generate_mipmaps=false
 disable_embedded_bitmaps=false
 multichannel_signed_distance_field=false

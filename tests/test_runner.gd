@@ -308,16 +308,22 @@ func _test_integrated_main_flow() -> void:
 			and action_name.position.y + action_name.size.y <= button.size.y
 			and action_name.get_minimum_size().x <= action_name.size.x
 			and action_name.get_theme_font_size("font_size") >= 6
+			and action_name.get_theme_color("font_color") == Color("#4C4053")
+			and action_name.get_theme_constant("outline_size") == 0
 		)
 	_check(labels_fit, "los nombres quedan centrados dentro de sus botones")
-	_check(game.theme.default_font.resource_path.ends_with("PixelifySans-Variable.ttf"), "todo el HUD usa la tipografía retro nueva")
+	_check(game.theme.default_font.resource_path.ends_with("Silkscreen-Regular.ttf"), "todo el HUD usa la nueva tipografía Silkscreen")
+	var font_has_spanish := true
+	for character in ["¿", "Á", "É", "Í", "Ó", "Ú", "Ñ", "ñ"]:
+		font_has_spanish = font_has_spanish and game.theme.default_font.has_char(character.unicode_at(0))
+	_check(font_has_spanish, "Silkscreen incluye interrogación, tildes y eñes para todos los diálogos")
 	_check(
 		not game.theme.default_font.multichannel_signed_distance_field
-		and int(game.theme.default_font.antialiasing) == 0
+		and int(game.theme.default_font.antialiasing) == 1
 		and int(game.theme.default_font.subpixel_positioning) == 0
-		and ProjectSettings.get_setting("display/window/stretch/mode") == "viewport"
-		and ProjectSettings.get_setting("display/window/stretch/scale_mode") == "integer",
-		"la tipografia se rasteriza una vez y escala en píxeles enteros"
+		and ProjectSettings.get_setting("display/window/stretch/mode") == "canvas_items"
+		and ProjectSettings.get_setting("display/window/stretch/scale_mode") == "fractional",
+		"la tipografía se dibuja suavizada a la resolución final de la ventana"
 	)
 	var phase_hint_visible := false
 	for visible_label in game.find_children("*", "Label", true, false):

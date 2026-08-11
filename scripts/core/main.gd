@@ -17,7 +17,7 @@ const WALLPAPER := Color("#8EC8C4")
 const ENTITY_POSITIONS := [Vector2(10, 24), Vector2(94, 24), Vector2(178, 24)]
 const ACTION_ICON_SHEET := "res://assets/ui/action-icons.png"
 const ACTION_ICON_CELL_SIZE := 256
-const GAME_FONT: FontFile = preload("res://assets/fonts/PixelifySans-Variable.ttf")
+const GAME_FONT: FontFile = preload("res://assets/fonts/Silkscreen-Regular.ttf")
 const PRE_ABSENCE_TALKS := ["chat_01", "chat_02", "chat_03", "chat_10", "chat_11", "chat_12"]
 
 var game_state := TerryGameState.new()
@@ -2014,13 +2014,11 @@ func _make_action_button(action_id: String, label_text: String, at: Vector2) -> 
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(icon)
-	var action_name := _make_label(label_text, Vector2.ZERO, Vector2.ZERO, 6)
+	var action_name := _make_label(label_text, Vector2.ZERO, Vector2.ZERO, 7)
 	action_name.name = "ActionName"
 	action_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	action_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	action_name.add_theme_color_override("font_color", CREAM)
-	action_name.add_theme_color_override("font_outline_color", INK)
-	action_name.add_theme_constant_override("outline_size", 1)
+	action_name.add_theme_color_override("font_color", INK)
 	action_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(action_name)
 	action_name.anchor_left = 0.0
