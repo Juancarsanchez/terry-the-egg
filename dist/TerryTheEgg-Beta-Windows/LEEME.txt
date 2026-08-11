@@ -1,0 +1,25 @@
+TERRY THE EGG — BETA PARA WINDOWS
+==================================
+
+Cómo jugar
+----------
+1. Extrae por completo el contenido del archivo ZIP.
+2. Abre TerryTheEgg-Beta.exe.
+3. Elige EMPEZAR DE CERO la primera vez.
+
+No necesitas instalar Godot, GitHub ni ninguna otra aplicación.
+
+Importante
+----------
+- No ejecutes el juego directamente desde dentro del ZIP: extráelo primero.
+- Windows puede mostrar un aviso de editor desconocido porque esta beta todavía no está firmada digitalmente.
+- Para conservar tu progreso, utiliza GUARDAR Y SALIR dentro del juego.
+- El guardado permanece en tu usuario de Windows aunque cierres o muevas la carpeta de la beta.
+
+Controles
+---------
+- Botón izquierdo: seleccionar acciones e interactuar.
+- Mantén pulsado y mueve el ratón sobre un huevo o criatura para acariciarlo.
+- Botón derecho: cancelar la herramienta seleccionada.
+
+Esta es una versión de prueba. Puede contener errores o contenido incompleto.

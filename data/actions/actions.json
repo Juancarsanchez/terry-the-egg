@@ -1,8 +1,8 @@
 {
-  "feed": {"label": "COMER", "symbol": "food"},
+  "feed": {"label": "COMER", "symbol": "creature_food"},
   "play": {"label": "JUGAR", "symbol": "play"},
   "sleep": {"label": "DORMIR", "symbol": "sleep"},
   "clean": {"label": "LIMPIAR", "symbol": "dirty"},
-  "status": {"label": "ESTADO", "symbol": "question"},
+  "status": {"label": "MIRAR", "symbol": "status"},
   "show_player_place": {"label": "ENSEÑARLE TU LADO", "symbol": "eye"}
 }

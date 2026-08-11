@@ -4,6 +4,7 @@ extends Node
 signal tool_changed(tool_id: String)
 
 const CURSOR_SHEET: Texture2D = preload("res://assets/ui/tool-cursors.png")
+const TALK_ICON: Texture2D = preload("res://assets/ui/terry-talk.png")
 const CELL_SIZE := 418
 const CURSOR_SIZE := 32
 const CURSOR_CELLS := {
@@ -28,6 +29,9 @@ func _ready() -> void:
 	var sheet_image := CURSOR_SHEET.get_image()
 	for mode in CURSOR_CELLS:
 		_textures[mode] = _extract_cursor(sheet_image, CURSOR_CELLS[mode])
+	var talk_image := TALK_ICON.get_image()
+	talk_image.resize(CURSOR_SIZE, CURSOR_SIZE, Image.INTERPOLATE_LANCZOS)
+	_textures["talk"] = ImageTexture.create_from_image(talk_image)
 	set_mode("arrow")
 
 
@@ -109,6 +113,8 @@ func set_mode(mode: String) -> void:
 			hotspot = Vector2(14, 22)
 		"status":
 			hotspot = Vector2(22, 20)
+		"talk":
+			hotspot = Vector2(16, 16)
 	Input.set_custom_mouse_cursor(_textures[mode], Input.CURSOR_ARROW, hotspot)
 
 

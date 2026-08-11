@@ -1,29 +1,31 @@
 class_name SymbolBubble
 extends Control
 
-const EXPRESSION_SHEET: Texture2D = preload("res://assets/ui/expression-symbols.png")
-const TOOL_SHEET: Texture2D = preload("res://assets/ui/tool-cursors.png")
-const EXPRESSION_CELL := Vector2(313.5, 313.5)
-const TOOL_CELL := Vector2(418, 418)
+signal symbol_pressed(symbol_id: String)
+
+const REACTION_SHEET: Texture2D = preload("res://assets/ui/reaction-symbols.png")
+const ACTION_SHEET: Texture2D = preload("res://assets/ui/action-icons.png")
+const TALK_ICON: Texture2D = preload("res://assets/ui/terry-talk.png")
+const REACTION_CELL := Vector2(320, 320)
+const ACTION_CELL := Vector2(256, 256)
 const SYMBOL_CELLS := {
-	"food": Vector2i(0, 0),
-	"play": Vector2i(1, 0),
-	"sleep": Vector2i(2, 0),
-	"dirty": Vector2i(3, 0),
-	"sick": Vector2i(0, 1),
-	"heart": Vector2i(1, 1),
-	"empty_heart": Vector2i(1, 1),
-	"pet": Vector2i(1, 1),
-	"no": Vector2i(2, 1),
-	"full": Vector2i(3, 1),
-	"question": Vector2i(0, 2),
-	"exclamation": Vector2i(1, 2),
-	"ellipsis": Vector2i(2, 2),
-	"sad": Vector2i(3, 2),
-	"happy": Vector2i(0, 3),
-	"surprise": Vector2i(1, 3),
-	"eye": Vector2i(2, 3),
-	"hatch": Vector2i(3, 3)
+	"heart": Vector2i(0, 0),
+	"no": Vector2i(1, 0),
+	"question": Vector2i(2, 0),
+	"ellipsis": Vector2i(3, 0),
+	"exclamation": Vector2i(0, 1),
+	"eye": Vector2i(1, 1),
+	"sad": Vector2i(2, 1),
+	"hatch": Vector2i(3, 1)
+}
+const TOOL_SYMBOL_CELLS := {
+	"pet_request": Vector2i(1, 0),
+	"egg_food": Vector2i(2, 0),
+	"creature_food": Vector2i(3, 0),
+	"play": Vector2i(4, 0),
+	"sleep": Vector2i(5, 0),
+	"dirty": Vector2i(6, 0),
+	"sick": Vector2i(7, 0)
 }
 
 var current_symbol := ""
@@ -33,24 +35,47 @@ var persistent := false
 var sequence: Array[String] = []
 var sequence_duration := 1.0
 var icon: TextureRect
+var _pulse_time := 0.0
 
 
 func _ready() -> void:
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	custom_minimum_size = Vector2(32, 22)
 	size = Vector2(32, 22)
+	gui_input.connect(_on_gui_input)
 	icon = TextureRect.new()
 	icon.position = Vector2(8, 0)
 	icon.size = Vector2(16, 16)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.pivot_offset = Vector2(8, 8)
 	add_child(icon)
 	hide()
 
 
+func _on_gui_input(event: InputEvent) -> void:
+	if (
+		current_symbol == "talk"
+		and event is InputEventMouseButton
+		and event.button_index == MOUSE_BUTTON_LEFT
+		and event.pressed
+	):
+		accept_event()
+		symbol_pressed.emit(current_symbol)
+
+
 func _process(delta: float) -> void:
-	if current_symbol == "" or persistent:
+	if current_symbol == "":
+		return
+	if current_symbol == "talk":
+		_pulse_time += delta
+		var pulse := 1.0 + sin(_pulse_time * 3.2) * 0.06
+		icon.scale = Vector2.ONE * pulse
+		queue_redraw()
+	else:
+		icon.scale = Vector2.ONE
+	if persistent:
 		return
 	remaining -= delta
 	if remaining <= 0.0:
@@ -71,6 +96,15 @@ func show_symbol(symbol_id: String, duration: float = 2.0, priority: int = 10, k
 	remaining = duration
 	persistent = keep
 	sequence_duration = maxf(0.05, sequence_duration)
+	if symbol_id == "talk":
+		icon.position = Vector2(6, -2)
+		icon.size = Vector2(20, 20)
+		icon.pivot_offset = Vector2(10, 10)
+	else:
+		icon.position = Vector2(8, 0)
+		icon.size = Vector2(16, 16)
+		icon.pivot_offset = Vector2(8, 8)
+		icon.scale = Vector2.ONE
 	icon.texture = symbol_texture
 	show()
 	queue_redraw()
@@ -102,21 +136,30 @@ func clear() -> void:
 	hide()
 
 
-func _texture_for_symbol(symbol_id: String) -> AtlasTexture:
+func _texture_for_symbol(symbol_id: String) -> Texture2D:
+	if symbol_id == "talk":
+		return TALK_ICON
 	var atlas := AtlasTexture.new()
-	if symbol_id == "pet_request":
-		atlas.atlas = TOOL_SHEET
-		atlas.region = Rect2(TOOL_CELL.x, 0, TOOL_CELL.x, TOOL_CELL.y)
+	atlas.filter_clip = true
+	if TOOL_SYMBOL_CELLS.has(symbol_id):
+		var tool_cell: Vector2i = TOOL_SYMBOL_CELLS[symbol_id]
+		atlas.atlas = ACTION_SHEET
+		atlas.region = Rect2(
+			float(tool_cell.x) * ACTION_CELL.x,
+			float(tool_cell.y) * ACTION_CELL.y,
+			ACTION_CELL.x,
+			ACTION_CELL.y
+		)
 		return atlas
 	if not SYMBOL_CELLS.has(symbol_id):
 		return null
 	var cell: Vector2i = SYMBOL_CELLS[symbol_id]
-	atlas.atlas = EXPRESSION_SHEET
+	atlas.atlas = REACTION_SHEET
 	atlas.region = Rect2(
-		float(cell.x) * EXPRESSION_CELL.x,
-		float(cell.y) * EXPRESSION_CELL.y,
-		EXPRESSION_CELL.x,
-		EXPRESSION_CELL.y
+		float(cell.x) * REACTION_CELL.x,
+		float(cell.y) * REACTION_CELL.y,
+		REACTION_CELL.x,
+		REACTION_CELL.y
 	)
 	return atlas
 

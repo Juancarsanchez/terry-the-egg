@@ -15,13 +15,15 @@ const LCD := Color("#CDE6B8")
 const LCD_DARK := Color("#A7CB99")
 const WALLPAPER := Color("#8EC8C4")
 const ENTITY_POSITIONS := [Vector2(10, 24), Vector2(94, 24), Vector2(178, 24)]
-const TOOL_CURSOR_SHEET := "res://assets/ui/tool-cursors.png"
-const TOOL_CELL_SIZE := 418
+const ACTION_ICON_SHEET := "res://assets/ui/action-icons.png"
+const ACTION_ICON_CELL_SIZE := 256
 const GAME_FONT: FontFile = preload("res://assets/fonts/PixelifySans-Variable.ttf")
+const PRE_ABSENCE_TALKS := ["chat_01", "chat_02", "chat_03", "chat_10", "chat_11", "chat_12"]
 
 var game_state := TerryGameState.new()
 var definitions: Dictionary
 var need_system := NeedSystem.new()
+var care_loop := CareLoopSystem.new()
 var save_manager := SaveManager.new()
 var progression := ProgressionDirector.new()
 var prompt_system := RequirementPromptSystem.new()
@@ -39,6 +41,8 @@ var action_icons: Dictionary = {}
 var special_button: Button
 var egg_nodes: Dictionary = {}
 var creature_nodes: Dictionary = {}
+var slot_nodes: Dictionary = {}
+var empty_slot_markers: Dictionary = {}
 var poop_nodes: Array[PoopController] = []
 var dialogue_panel: Panel
 var dialogue_speaker: Label
@@ -54,6 +58,10 @@ var continue_button: Button
 var exit_backdrop: ColorRect
 var exit_panel: Panel
 var save_exit_button: Button
+var status_backdrop: ColorRect
+var status_window: Panel
+var status_title: Label
+var status_details: Label
 var debug_target_index := 0
 var _loaded_existing_save := false
 var _game_started := false
@@ -62,6 +70,7 @@ var _tick_accumulator := 0.0
 var _prompt_accumulator := 0.0
 var _autosave_accumulator := 0.0
 var _dialogue_generation := 0
+var _absence_generation := 0
 var _egg_request_alerted: Dictionary = {}
 
 
@@ -117,12 +126,7 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("toggle_debug"):
-		debug_panel.visible = not debug_panel.visible
-		if debug_panel.visible:
-			_refresh_debug()
-		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 		_cancel_tool()
 
 
@@ -132,6 +136,28 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_APPLICATION_PAUSED:
 		if _game_started and save_manager != null and game_state != null:
 			save_manager.save_game(game_state)
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_on_application_focus_lost()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		_on_application_focus_returned()
+
+
+func _on_application_focus_lost() -> void:
+	if not _game_started or not bool(game_state.flags.get("pending_disappearance", false)):
+		return
+	game_state.flags["absence_return_ready"] = true
+	save_manager.save_game(game_state)
+
+
+func _on_application_focus_returned() -> void:
+	if (
+		not _game_started
+		or not bool(game_state.flags.get("pending_disappearance", false))
+		or not bool(game_state.flags.get("absence_return_ready", false))
+		or dialogue.is_active()
+	):
+		return
+	_perform_disappearance.call_deferred()
 
 
 func _draw() -> void:
@@ -180,12 +206,26 @@ func _build_interface() -> void:
 	arena_panel.add_child(arena)
 
 	for i in TerryGameState.CREATURE_IDS.size():
+		var creature_id: String = TerryGameState.CREATURE_IDS[i]
 		var slot := Panel.new()
 		slot.position = ENTITY_POSITIONS[i] + Vector2(-4, 3)
 		slot.size = Vector2(72, 82)
-		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.mouse_filter = Control.MOUSE_FILTER_STOP
 		slot.add_theme_stylebox_override("panel", _stylebox(Color(1, 1, 1, 0.14), Color(0.25, 0.36, 0.23, 0.23), 1, 12))
+		slot.gui_input.connect(_on_slot_input.bind(creature_id))
 		arena.add_child(slot)
+		slot_nodes[creature_id] = slot
+		var empty_marker := Panel.new()
+		empty_marker.position = Vector2(13, 58)
+		empty_marker.size = Vector2(46, 9)
+		empty_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		empty_marker.add_theme_stylebox_override(
+			"panel",
+			_stylebox(Color(0.30, 0.38, 0.27, 0.20), Color(0.43, 0.54, 0.38, 0.35), 1, 8)
+		)
+		empty_marker.hide()
+		slot.add_child(empty_marker)
+		empty_slot_markers[creature_id] = empty_marker
 
 	var actions := [
 		{"id": "food", "text": "YUM"},
@@ -235,30 +275,61 @@ func _build_interface() -> void:
 	drag_preview.hide()
 	add_child(drag_preview)
 	_build_dialogue_ui()
+	_build_status_window()
 	_build_fade_overlay()
-	_build_debug_panel()
 	_build_session_menus()
 
 
 func _build_dialogue_ui() -> void:
 	dialogue_panel = Panel.new()
-	dialogue_panel.position = Vector2(28, 55)
-	dialogue_panel.size = Vector2(264, 105)
-	dialogue_panel.z_index = 10
+	dialogue_panel.position = Vector2(22, 39)
+	dialogue_panel.size = Vector2(276, 136)
+	dialogue_panel.z_index = 36
 	dialogue_panel.add_theme_stylebox_override("panel", _stylebox(CREAM, INK, 2, 10))
 	add_child(dialogue_panel)
-	dialogue_speaker = _make_label("", Vector2(8, 5), Vector2(248, 14), 9)
+	dialogue_speaker = _make_label("", Vector2(10, 6), Vector2(256, 14), 9)
 	dialogue_speaker.add_theme_color_override("font_color", SHADOW)
 	dialogue_panel.add_child(dialogue_speaker)
-	dialogue_text = _make_label("", Vector2(8, 20), Vector2(248, 31), 10)
+	dialogue_text = _make_label("", Vector2(10, 21), Vector2(256, 50), 9)
 	dialogue_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dialogue_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	dialogue_panel.add_child(dialogue_text)
 	dialogue_options = HBoxContainer.new()
-	dialogue_options.position = Vector2(6, 56)
-	dialogue_options.size = Vector2(252, 42)
+	dialogue_options.position = Vector2(7, 79)
+	dialogue_options.size = Vector2(262, 49)
 	dialogue_options.add_theme_constant_override("separation", 4)
 	dialogue_panel.add_child(dialogue_options)
 	dialogue_panel.hide()
+
+
+func _build_status_window() -> void:
+	status_backdrop = ColorRect.new()
+	status_backdrop.color = Color(0.15, 0.13, 0.18, 0.58)
+	status_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	status_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	status_backdrop.z_index = 34
+	add_child(status_backdrop)
+	status_window = Panel.new()
+	status_window.position = Vector2(49, 48)
+	status_window.size = Vector2(222, 184)
+	status_window.add_theme_stylebox_override("panel", _stylebox(CREAM, INK, 3, 16))
+	status_backdrop.add_child(status_window)
+	status_title = _make_label("", Vector2(13, 11), Vector2(158, 22), 11)
+	status_title.add_theme_color_override("font_color", INK)
+	status_window.add_child(status_title)
+	var close_button := _make_button("X", Vector2(181, 9), Vector2(29, 24), 8)
+	close_button.pressed.connect(_close_status_window)
+	status_window.add_child(close_button)
+	status_details = _make_label("", Vector2(14, 44), Vector2(194, 124), 8)
+	status_details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status_details.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_details.add_theme_color_override("font_color", INK)
+	status_window.add_child(status_details)
+	status_backdrop.hide()
+
+
+func _close_status_window() -> void:
+	status_backdrop.hide()
 
 
 func _build_fade_overlay() -> void:
@@ -361,6 +432,272 @@ func _build_session_menus() -> void:
 	exit_backdrop.hide()
 
 
+func _jump_to_story_moment(moment_id: String) -> void:
+	_dialogue_generation += 1
+	dialogue.current_dialogue = ""
+	dialogue.current_node = ""
+	dialogue_panel.hide()
+	status_backdrop.hide()
+	fade_overlay.color = Color.TRANSPARENT
+	fade_overlay.hide()
+	_clear_poop_nodes()
+	_egg_request_alerted.clear()
+	game_state.reset_all()
+	_game_started = true
+	_loaded_existing_save = true
+	start_backdrop.hide()
+	exit_backdrop.hide()
+	for phase_id in range(9):
+		progression.reset_event_latch(phase_id)
+
+	var start_birth_sequence := false
+	var start_dialogue_id := ""
+	match moment_id:
+		"start":
+			pass
+		"crack_25":
+			_story_set_egg_progress(3, 0)
+		"first_meal":
+			_story_set_egg_progress(3, 2)
+		"crack_50":
+			_story_set_egg_progress(6, 2)
+		"crack_75":
+			_story_set_egg_progress(9, 2)
+		"second_meal":
+			_story_set_egg_progress(9, 4)
+		"birth":
+			_story_set_egg_progress(12, 4)
+			start_birth_sequence = true
+		"coexistence":
+			_story_prepare_coexistence()
+		"pipo_chubby":
+			_story_prepare_coexistence()
+			game_state.creatures["creature_a"]["born_unix"] = int(Time.get_unix_time_from_system()) - TerryGameState.FIRST_DAY_SECONDS
+			game_state.creatures["creature_a"]["favorite_care"] = 4
+			game_state.creatures["creature_a"]["body_state"] = "chubby"
+		"chat_01":
+			_story_prepare_coexistence()
+			game_state.global_counters["neglected_requests"] = 1
+			game_state.flags["first_voice_triggered"] = true
+			game_state.flags["first_neglected_creature"] = "creature_b"
+			start_dialogue_id = "chat_01"
+		"chat_02":
+			_story_prepare_coexistence()
+			_story_mark_dialogues(["chat_01"])
+			start_dialogue_id = "chat_02"
+		"chat_03":
+			_story_prepare_coexistence()
+			_story_mark_dialogues(["chat_01", "chat_02"])
+			start_dialogue_id = "chat_03"
+		"chat_10":
+			_story_prepare_coexistence()
+			_story_mark_dialogues(["chat_01", "chat_02", "chat_03"])
+			game_state.answers["why_return_answer"] = "love"
+			start_dialogue_id = "chat_10"
+		"chat_11":
+			_story_prepare_coexistence()
+			_story_mark_dialogues(["chat_01", "chat_02", "chat_03", "chat_10"])
+			game_state.answers["why_return_answer"] = "love"
+			start_dialogue_id = "chat_11"
+		"chat_12":
+			_story_prepare_coexistence()
+			_story_mark_dialogues(["chat_01", "chat_02", "chat_03", "chat_10", "chat_11"])
+			game_state.answers["why_return_answer"] = "love"
+			start_dialogue_id = "chat_12"
+		"before_absence":
+			_story_prepare_coexistence()
+			_story_complete_coexistence()
+			_story_mark_dialogues(PRE_ABSENCE_TALKS)
+			game_state.flags["pending_disappearance"] = true
+		"absence":
+			_story_prepare_absence()
+		"dialogue_01":
+			_story_prepare_absence()
+			start_dialogue_id = "dialogue_01"
+		"chat_04":
+			_story_prepare_after_words()
+			start_dialogue_id = "chat_04"
+		"chat_05":
+			_story_prepare_after_words()
+			_story_mark_dialogues(["chat_04"])
+			start_dialogue_id = "chat_05"
+		"chat_06":
+			_story_prepare_after_words()
+			_story_mark_dialogues(["chat_04", "chat_05"])
+			start_dialogue_id = "chat_06"
+		"dialogue_02":
+			_story_prepare_after_words()
+			_story_complete_post_dialogue()
+			_story_mark_dialogues(["chat_04", "chat_05", "chat_06"])
+			start_dialogue_id = "dialogue_02"
+		"show_side":
+			_story_prepare_after_side()
+		"chat_09":
+			_story_prepare_after_side()
+			_story_mark_dialogues(["chat_07", "chat_08"])
+			start_dialogue_id = "chat_09"
+		"mota_absence":
+			_story_prepare_mota_absence()
+		"dialogue_04":
+			_story_prepare_mota_absence()
+			start_dialogue_id = "dialogue_04"
+		"more":
+			_story_prepare_final_hunger()
+		"dialogue_05":
+			_story_prepare_final_hunger()
+			game_state.global_counters["final_feed_count"] = 3
+			start_dialogue_id = "dialogue_05"
+		"ending":
+			_story_prepare_final_hunger()
+			_story_mark_dialogues(["dialogue_05"])
+			game_state.flags["true_ending_seen"] = true
+			_story_set_phase(8)
+
+	_sync_from_state()
+	_update_egg_requests(false)
+	status_label.text = _story_moment_message(moment_id)
+	save_manager.save_game(game_state)
+	if start_birth_sequence:
+		for creature_id in TerryGameState.CREATURE_IDS:
+			_hatch_sequence(creature_id)
+	elif start_dialogue_id != "":
+		dialogue.start(start_dialogue_id, game_state)
+
+
+func _story_set_phase(phase_id: int) -> void:
+	game_state.phase = phase_id
+	game_state.unlocks.clear()
+	if progression.phases.has(phase_id):
+		for action in progression.phases[phase_id].get("available_actions", []):
+			game_state.unlocks.append(str(action))
+
+
+func _story_set_egg_progress(care: int, nutrition: int) -> void:
+	var now := int(Time.get_unix_time_from_system())
+	for creature_id in TerryGameState.CREATURE_IDS:
+		var egg: Dictionary = game_state.eggs[creature_id]
+		egg["care"] = care
+		egg["nutrition"] = nutrition
+		egg["care_strokes"] = care % TerryGameState.EGG_CARE_CAPACITY
+		egg["meal_bites"] = nutrition % TerryGameState.EGG_MEAL_CAPACITY
+		egg["next_care_unix"] = 0
+		egg["next_meal_unix"] = now + TerryGameState.EGG_MEAL_INTERVAL_SECONDS if nutrition == 2 else 0
+		_update_egg_visual_state(egg)
+
+
+func _story_prepare_coexistence() -> void:
+	for creature_id in TerryGameState.CREATURE_IDS:
+		var egg: Dictionary = game_state.eggs[creature_id]
+		egg["care"] = TerryGameState.EGG_CARE_REQUIRED
+		egg["nutrition"] = TerryGameState.EGG_NUTRITION_REQUIRED
+		game_state.hatch(creature_id)
+	_story_set_phase(1)
+
+
+func _story_complete_coexistence() -> void:
+	game_state.global_counters["neglected_requests"] = 2
+	game_state.flags["first_voice_triggered"] = true
+	game_state.flags["first_neglected_creature"] = "creature_b"
+
+
+func _story_prepare_absence() -> void:
+	_story_prepare_coexistence()
+	_story_complete_coexistence()
+	_story_mark_dialogues(PRE_ABSENCE_TALKS)
+	game_state.flags["pending_disappearance"] = false
+	game_state.flags["creature_a_disappeared"] = true
+	game_state.flags["first_absence_sequence_played"] = true
+	game_state.flags["absence_reveal_active"] = true
+	game_state.creatures["creature_a"]["present"] = false
+	game_state.creatures["creature_a"]["disappeared"] = true
+	_story_set_phase(2)
+
+
+func _story_prepare_after_words() -> void:
+	_story_prepare_absence()
+	game_state.flags["absence_reveal_active"] = false
+	if "dialogue_01" not in game_state.dialogues_seen:
+		game_state.dialogues_seen.append("dialogue_01")
+	game_state.answers["dialogue_01_answer"] = "where"
+	game_state.flags["dialogue_active"] = false
+	_story_set_phase(3)
+	game_state.capture_post_dialogue_baseline()
+
+
+func _story_complete_post_dialogue() -> void:
+	var baseline_global: Dictionary = game_state.post_baseline.get("global", {})
+	game_state.global_counters["care_cycles_completed"] = int(
+		baseline_global.get("care_cycles_completed", 0)
+	) + 6
+
+
+func _story_mark_dialogues(dialogue_ids: Array) -> void:
+	for dialogue_id in dialogue_ids:
+		var id := str(dialogue_id)
+		if id not in game_state.dialogues_seen:
+			game_state.dialogues_seen.append(id)
+
+
+func _story_prepare_after_side() -> void:
+	_story_prepare_after_words()
+	_story_complete_post_dialogue()
+	_story_mark_dialogues(["chat_04", "chat_05", "chat_06", "dialogue_02", "dialogue_03"])
+	game_state.flags["player_place_shown"] = true
+	_story_set_phase(5)
+
+
+func _story_prepare_mota_absence() -> void:
+	_story_prepare_after_side()
+	_story_mark_dialogues(["chat_07", "chat_08", "chat_09"])
+	game_state.flags["pending_mota_disappearance"] = false
+	game_state.flags["creature_b_disappeared"] = true
+	game_state.creatures["creature_b"]["present"] = false
+	game_state.creatures["creature_b"]["disappeared"] = true
+	_story_set_phase(6)
+
+
+func _story_prepare_final_hunger() -> void:
+	_story_prepare_mota_absence()
+	_story_mark_dialogues(["dialogue_04"])
+	game_state.global_counters["final_feed_count"] = 0
+	_story_set_phase(7)
+
+
+func _story_moment_message(moment_id: String) -> String:
+	var messages := {
+		"start": "INICIO · LOS HUEVOS ACABAN DE LLEGAR.",
+		"crack_25": "PRIMERA GRIETA · LOS MIMOS EMPIEZAN A HACER EFECTO.",
+		"first_meal": "PRIMER NÉCTAR · EL HUEVO ESTÁ SATISFECHO.",
+		"crack_50": "GRIETA MEDIA · ALGO SE MUEVE DENTRO.",
+		"crack_75": "CASI LISTO · SOLO FALTA EL ÚLTIMO EMPUJÓN.",
+		"second_meal": "SEGUNDO NÉCTAR · EL NACIMIENTO ESTÁ MUY CERCA.",
+		"birth": "NACIMIENTO · OBSERVA CÓMO SE ABREN LOS HUEVOS.",
+		"coexistence": "LOS TRES HERMANOS · TODOS ESTÁN EN CASA.",
+		"pipo_chubby": "FINAL DEL PRIMER DÍA · PIPO VIVE PARA COMER Y DORMIR.",
+		"chat_01": "PRIMER DESCUIDO · TERRY HABLA POR PRIMERA VEZ.",
+		"chat_02": "TERRY TE PREGUNTA POR QUÉ SIEMPRE VUELVES.",
+		"chat_03": "TERRY QUIERE SABER SI PIENSAS EN ÉL CUANDO NO ESTÁS.",
+		"chat_10": "TERRY RECUERDA EXACTAMENTE POR QUÉ DIJISTE QUE VOLVÍAS.",
+		"chat_11": "TERRY QUIERE LLAMARTE AUNQUE NO NECESITE NADA.",
+		"chat_12": "TERRY QUIERE SABER SI VENDRÍAS A BUSCARLO.",
+		"before_absence": "ALGO VA A CAMBIAR · PIPO SIGUE AQUÍ.",
+		"absence": "EL ESPACIO DE PIPO ESTÁ VACÍO.",
+		"dialogue_01": "TERRY DICE POR PRIMERA VEZ: «SE FUE».",
+		"chat_04": "TERRY HABLA SOBRE ECHAR DE MENOS.",
+		"chat_05": "TERRY PREGUNTA SI LOS DEMÁS DEBEN COMPARTIR.",
+		"chat_06": "TERRY PREGUNTA SI LO QUERRÍAS TRAS HACER ALGO MALO.",
+		"dialogue_02": "TERRY QUIERE SABER QUÉ HAY AL OTRO LADO.",
+		"show_side": "TERRY YA HA VISTO TU LADO DE LA PANTALLA.",
+		"chat_09": "EL HAMBRE DE TERRY EMPIEZA A CAMBIAR.",
+		"mota_absence": "EL ESPACIO DE MOTA TAMBIÉN ESTÁ VACÍO.",
+		"dialogue_04": "TERRY INSISTE EN QUE SIGUE SIENDO TERRY.",
+		"more": "TERRY PIDE COMIDA OTRA VEZ.",
+		"dialogue_05": "TERRY QUIERE SABER QUÉ COMES TÚ.",
+		"ending": "DESENLACE · TERRY PREGUNTA: «¿ME ABRES?»"
+	}
+	return str(messages.get(moment_id, "ESTADO DE PRUEBA PREPARADO."))
+
+
 func _show_start_menu() -> void:
 	continue_button.disabled = not save_manager.has_save()
 	continue_button.text = "CONTINUAR PARTIDA" if not continue_button.disabled else "SIN PARTIDA GUARDADA"
@@ -401,8 +738,9 @@ func _begin_session() -> void:
 		bool(game_state.flags.get("pending_disappearance", false))
 		and not bool(game_state.flags.get("creature_a_disappeared", false))
 		and _loaded_existing_save
-		and not bool(game_state.creatures["creature_main"].get("sleeping", false))
+		and "chat_01" in game_state.dialogues_seen
 	):
+		game_state.flags["absence_return_ready"] = true
 		_perform_disappearance.call_deferred()
 
 
@@ -459,21 +797,42 @@ func _sync_from_state() -> void:
 				creature_node.action_requested.connect(_on_creature_action)
 				creature_node.hover_changed.connect(_on_target_hover)
 				arena.add_child(creature_node)
+				creature_node.bubble.symbol_pressed.connect(_on_symbol_pressed.bind(creature_id))
+				creature_node.bubble.mouse_entered.connect(_on_talk_bubble_hover.bind(creature_node.bubble, true))
+				creature_node.bubble.mouse_exited.connect(_on_talk_bubble_hover.bind(creature_node.bubble, false))
 				creature_nodes[creature_id] = creature_node
-			creature_nodes[creature_id].set_sleeping(bool(creature.get("sleeping", false)))
+			creature_nodes[creature_id].set_body_state(str(creature.get("body_state", "normal")))
+			var stored_activity := str(creature.get("activity", "sleep" if bool(creature.get("sleeping", false)) else ""))
+			if stored_activity != "sleep" and not bool(creature.get("sleeping", false)) and creature_nodes[creature_id].sleeping:
+				creature_nodes[creature_id].set_sleeping(false)
+			creature_nodes[creature_id].set_activity(
+				stored_activity,
+				int(creature.get("activity_until_unix", 0))
+			)
 		elif creature_nodes.has(creature_id):
 			creature_nodes[creature_id].queue_free()
 			creature_nodes.erase(creature_id)
+		if empty_slot_markers.has(creature_id):
+			empty_slot_markers[creature_id].visible = bool(creature.get("disappeared", false))
+	if bool(game_state.flags.get("absence_reveal_active", false)):
+		for sleeping_id in ["creature_b", "creature_main"]:
+			if creature_nodes.has(sleeping_id):
+				creature_nodes[sleeping_id].set_sleeping(true)
 	for action_id in action_buttons:
 		var unlock_id: String = "feed" if action_id == "food" else str(action_id)
 		action_buttons[action_id].disabled = unlock_id not in game_state.unlocks
 	_update_food_tool_art()
+	_refresh_talk_request()
 	_sync_poops_from_state()
 	_refresh_debug()
 
 
 func _on_action_button(action_id: String) -> void:
 	if dialogue.is_active():
+		return
+	if bool(game_state.flags.get("absence_reveal_active", false)):
+		_cancel_tool()
+		status_label.text = "NINGUNO DE LOS DOS RESPONDE. SIGUEN DORMIDOS."
 		return
 	if cursor_manager.selected_tool == action_id:
 		_cancel_tool()
@@ -497,6 +856,27 @@ func _cancel_tool() -> void:
 	item_drag.cancel()
 	cursor_manager.cancel_tool()
 	status_label.text = "Acción cancelada."
+
+
+func _on_slot_input(event: InputEvent, creature_id: String) -> void:
+	if (
+		creature_id != "creature_a"
+		or not bool(game_state.flags.get("creature_a_disappeared", false))
+		or not (event is InputEventMouseButton)
+		or event.button_index != MOUSE_BUTTON_LEFT
+		or not event.pressed
+	):
+		return
+	_cancel_tool()
+	status_label.text = "EL SITIO DE PIPO ESTÁ FRÍO. SOLO QUEDA LA HUELLA DONDE DORMÍA."
+	audio_manager.play_tone("wrong")
+
+
+func _on_talk_bubble_hover(bubble: SymbolBubble, entered: bool) -> void:
+	if entered and bubble.current_symbol == "talk":
+		cursor_manager.set_mode("talk")
+	else:
+		cursor_manager.refresh()
 
 
 func _on_tool_changed(tool_id: String) -> void:
@@ -589,8 +969,7 @@ func _on_egg_feed(creature_id: String) -> void:
 	if int(egg["meal_bites"]) >= TerryGameState.EGG_MEAL_CAPACITY and float(egg["nutrition"]) < float(egg["nutrition_required"]):
 		egg["next_meal_unix"] = int(Time.get_unix_time_from_system()) + TerryGameState.EGG_MEAL_INTERVAL_SECONDS
 	if egg_nodes.has(creature_id):
-		var reaction := "full" if int(egg["meal_bites"]) >= TerryGameState.EGG_MEAL_CAPACITY else "happy"
-		egg_nodes[creature_id].bubble.show_symbol(reaction, 1.0, 80)
+		egg_nodes[creature_id].bubble.show_symbol("heart", 1.0, 80)
 	if int(egg["meal_bites"]) >= TerryGameState.EGG_MEAL_CAPACITY and float(egg["nutrition"]) < float(egg["nutrition_required"]):
 		status_label.text = "%s YA ESTÁ SATISFECHA. AHORA LE VENDRÁN BIEN UNOS MIMOS." % definitions[creature_id].display_name.to_upper()
 	else:
@@ -675,7 +1054,7 @@ func _update_egg_requests(play_sound: bool = true) -> void:
 		if _egg_can_accept_care(creature_id):
 			desired_symbol = "pet_request"
 		elif _egg_can_accept_food(creature_id):
-			desired_symbol = "food"
+			desired_symbol = "egg_food"
 		var previous_symbol := str(_egg_request_alerted.get(creature_id, ""))
 		var bubble: SymbolBubble = egg_nodes[creature_id].bubble
 		if desired_symbol != "":
@@ -685,7 +1064,7 @@ func _update_egg_requests(play_sound: bool = true) -> void:
 				new_request = true
 			_egg_request_alerted[creature_id] = desired_symbol
 		else:
-			if bubble.current_symbol in ["food", "pet_request"]:
+			if bubble.current_symbol in ["egg_food", "pet_request"]:
 				bubble.clear()
 			_egg_request_alerted[creature_id] = ""
 	if new_request and play_sound:
@@ -715,7 +1094,7 @@ func _hatch_sequence(creature_id: String) -> void:
 	egg["visual_state"] = "hatching"
 	if egg_nodes.has(creature_id):
 		egg_nodes[creature_id].set_visual_state("hatching")
-		egg_nodes[creature_id].bubble.show_sequence(["hatch", "happy"], 0.45, 80)
+		egg_nodes[creature_id].bubble.show_sequence(["hatch", "heart"], 0.45, 80)
 	audio_manager.play_tone("hatch")
 	await get_tree().create_timer(0.8).timeout
 	game_state.hatch(creature_id)
@@ -728,17 +1107,34 @@ func _hatch_sequence(creature_id: String) -> void:
 func _on_creature_action(creature_id: String, tool: String) -> void:
 	if dialogue.is_active():
 		return
+	if bool(game_state.flags.get("absence_reveal_active", false)):
+		_cancel_tool()
+		status_label.text = "NO RESPONDE. EL SUEÑO PARECE DEMASIADO PROFUNDO."
+		return
 	var creature: Dictionary = game_state.creatures[creature_id]
+	if str(creature.get("activity", "")) != "" and tool != "status":
+		var activity_name := "JUGANDO" if str(creature.get("activity", "")) == "play" else "DURMIENDO"
+		_refuse_creature_action(creature_id, "%s SIGUE %s." % [definitions[creature_id].display_name.to_upper(), activity_name])
+		return
 	if bool(creature.get("sleeping", false)) and tool != "status":
 		_refuse_creature_action(creature_id, "%s ESTÁ DURMIENDO." % definitions[creature_id].display_name.to_upper())
 		return
+	var tool_actions := {"pet": "petted", "food": "fed", "play": "played", "sleep": "slept"}
+	if tool_actions.has(tool) and not (game_state.phase == 7 and creature_id == "creature_main"):
+		if not _request_allows_action(creature_id, str(tool_actions[tool])):
+			_refuse_creature_action(creature_id, "%s TE ESTÁ PIDIENDO OTRA COSA." % definitions[creature_id].display_name.to_upper())
+			return
 	match tool:
 		"pet":
 			_apply_creature_action(creature_id, "petted")
+			_complete_request_if_matching(creature_id, "petted")
 			if creature_id == "creature_main":
 				creature["ready_to_sleep"] = true
 			creature_nodes[creature_id].react("pet_reaction", "heart")
 		"food":
+			if game_state.phase == 7 and creature_id == "creature_main":
+				_feed_final_hunger()
+				return
 			if not _creature_can_accept_food(creature_id):
 				var wait_text := _creature_meal_wait_text(creature)
 				var message := "%s NO TIENE MÁS HAMBRE." % definitions[creature_id].display_name.to_upper()
@@ -756,13 +1152,26 @@ func _on_creature_action(creature_id: String, tool: String) -> void:
 				if int(creature.get("poop_due_unix", 0)) <= 0:
 					creature["poop_due_unix"] = int(Time.get_unix_time_from_system()) + TerryGameState.POOP_DELAY_SECONDS
 				_apply_creature_action(creature_id, "fed")
-				creature_nodes[creature_id].react("eat", "happy")
+				_complete_request_if_matching(creature_id, "fed")
+				creature_nodes[creature_id].react("eat", "heart")
 				cursor_manager.cancel_tool()
 				status_label.text = "%s HA COMIDO." % definitions[creature_id].display_name.to_upper()
 				save_manager.save_game(game_state)
 		"play":
+			if not _request_allows_action(creature_id, "played"):
+				_refuse_creature_action(creature_id, "%s TE ESTÁ PIDIENDO OTRA COSA." % definitions[creature_id].display_name.to_upper())
+				return
+			var now := int(Time.get_unix_time_from_system())
+			if not care_loop.begin_activity(creature, "play", now, TerryGameState.PLAY_DURATION_SECONDS):
+				_refuse_creature_action(creature_id, "%s YA ESTÁ OCUPADA." % definitions[creature_id].display_name.to_upper())
+				return
 			_apply_creature_action(creature_id, "played")
-			creature_nodes[creature_id].react("play", "happy", 1.1)
+			_complete_request_if_matching(creature_id, "played")
+			creature_nodes[creature_id].set_activity("play", int(creature["activity_until_unix"]))
+			creature_nodes[creature_id].bubble.clear()
+			creature_nodes[creature_id].bubble.show_symbol("heart", 1.0, 75)
+			status_label.text = "%s JUGARÁ DURANTE 1 HORA. PUEDES VOLVER A TU BLOQUE DE TRABAJO." % definitions[creature_id].display_name.to_upper()
+			save_manager.save_game(game_state)
 			cursor_manager.cancel_tool()
 		"sleep":
 			_try_sleep(creature_id)
@@ -774,6 +1183,30 @@ func _on_creature_action(creature_id: String, tool: String) -> void:
 			_refuse_creature_action(creature_id, "%s PREFIERE HACER OTRA COSA AHORA." % definitions[creature_id].display_name.to_upper())
 
 
+func _feed_final_hunger() -> void:
+	if not creature_nodes.has("creature_main"):
+		return
+	var count := int(game_state.global_counters.get("final_feed_count", 0))
+	if count >= 3:
+		_refuse_creature_action("creature_main", "TERRY YA NO ESTÁ MIRANDO LA COMIDA.")
+		return
+	if not item_drag.drop("creature", "creature_main", true):
+		return
+	game_state.global_counters["final_feed_count"] = count + 1
+	game_state.increment_action("creature_main", "fed")
+	creature_nodes["creature_main"].react("eat", "heart", 1.1)
+	cursor_manager.cancel_tool()
+	audio_manager.play_tone("action")
+	if count == 0:
+		status_label.text = "TERRY: «GRACIAS.»"
+	elif count == 1:
+		status_label.text = "TERRY: «GRACIAS OTRA VEZ.»"
+	else:
+		status_label.text = "TERRY: «MÁS.»"
+	progression.evaluate(game_state)
+	save_manager.save_game(game_state)
+
+
 func _apply_creature_action(creature_id: String, action: String) -> void:
 	var creature: Dictionary = game_state.creatures[creature_id]
 	need_system.apply_action(creature, action)
@@ -782,6 +1215,34 @@ func _apply_creature_action(creature_id: String, action: String) -> void:
 	audio_manager.play_tone("action")
 	progression.evaluate(game_state)
 	_refresh_debug()
+
+
+func _complete_request_if_matching(creature_id: String, action: String) -> bool:
+	var completed := care_loop.fulfill_request(
+		game_state,
+		creature_id,
+		action,
+		int(Time.get_unix_time_from_system())
+	)
+	if completed:
+		if creature_nodes.has(creature_id):
+			creature_nodes[creature_id].bubble.clear()
+		progression.evaluate(game_state)
+		_maybe_offer_talk()
+	return completed
+
+
+func _request_allows_action(creature_id: String, action: String) -> bool:
+	var request := str(game_state.creatures[creature_id].get("request", ""))
+	if request == "":
+		return true
+	var mapping := {
+		"fed": "food",
+		"played": "play",
+		"slept": "sleep",
+		"petted": "affection"
+	}
+	return str(mapping.get(action, "")) == request
 
 
 func _creature_can_accept_food(creature_id: String) -> bool:
@@ -827,19 +1288,35 @@ func _try_sleep(creature_id: String) -> void:
 	if bool(creature.get("sleeping", false)):
 		_refuse_creature_action(creature_id, "%s YA ESTÁ DURMIENDO." % definition.display_name.to_upper())
 		return
+	if not _request_allows_action(creature_id, "slept"):
+		_refuse_creature_action(creature_id, "%s TE ESTÁ PIDIENDO OTRA COSA." % definition.display_name.to_upper())
+		return
 	creature["ready_to_sleep"] = false
-	creature["sleeping"] = true
-	creature["sleep_until_unix"] = int(Time.get_unix_time_from_system()) + TerryGameState.SLEEP_DURATION_SECONDS
+	var now := int(Time.get_unix_time_from_system())
+	if not care_loop.begin_activity(creature, "sleep", now, TerryGameState.SLEEP_DURATION_SECONDS):
+		_refuse_creature_action(creature_id, "%s YA ESTÁ OCUPADA." % definition.display_name.to_upper())
+		return
 	game_state.increment_action(creature_id, "slept")
-	creature_nodes[creature_id].set_sleeping(true)
+	_complete_request_if_matching(creature_id, "slept")
+	creature_nodes[creature_id].set_activity("sleep", int(creature["sleep_until_unix"]))
 	status_label.text = "%s SE HA ACURRUCADO · DORMIRÁ 1 HORA." % definition.display_name.to_upper()
 	progression.evaluate(game_state)
 	save_manager.save_game(game_state)
 
 
 func _update_creature_timers() -> void:
+	if bool(game_state.flags.get("absence_reveal_active", false)):
+		return
 	var now := int(Time.get_unix_time_from_system())
 	var state_changed := false
+	var care_events := care_loop.update(game_state, definitions, now)
+	var story_neglect_registered := false
+	for event in care_events:
+		if str(event.get("type", "")) == "request_missed":
+			event["counts_for_story"] = not story_neglect_registered
+			story_neglect_registered = true
+		_handle_care_loop_event(event)
+		state_changed = true
 	for creature_id in TerryGameState.CREATURE_IDS:
 		var creature: Dictionary = game_state.creatures[creature_id]
 		var next_meal := int(creature.get("next_meal_unix", 0))
@@ -847,17 +1324,6 @@ func _update_creature_timers() -> void:
 			creature["meal_bites"] = 0
 			creature["next_meal_unix"] = 0
 			state_changed = true
-		var sleep_until := int(creature.get("sleep_until_unix", 0))
-		if bool(creature.get("sleeping", false)) and sleep_until > 0 and now >= sleep_until:
-			creature["sleeping"] = false
-			creature["sleep_until_unix"] = 0
-			creature["needs"]["energy"] = 100.0
-			if creature_nodes.has(creature_id):
-				creature_nodes[creature_id].set_sleeping(false)
-			status_label.text = "%s SE HA DESPERTADO." % definitions[creature_id].display_name.to_upper()
-			state_changed = true
-			if creature_id == "creature_main" and bool(game_state.flags.get("pending_disappearance", false)):
-				_perform_disappearance.call_deferred()
 		var poop_due := int(creature.get("poop_due_unix", 0))
 		if (
 			poop_due > 0
@@ -872,22 +1338,147 @@ func _update_creature_timers() -> void:
 		save_manager.save_game(game_state)
 
 
+func _handle_care_loop_event(event: Dictionary) -> void:
+	var creature_id := str(event.get("creature_id", ""))
+	if not definitions.has(creature_id):
+		return
+	var display_name := str(definitions[creature_id].display_name).to_upper()
+	match str(event.get("type", "")):
+		"request_started":
+			var request := str(event.get("request", ""))
+			if creature_nodes.has(creature_id):
+				creature_nodes[creature_id].bubble.show_symbol(care_loop.request_symbol(request), 3600.0, 105, true)
+			status_label.text = _request_message(creature_id, request)
+			audio_manager.play_tone("talk")
+		"request_missed":
+			if creature_nodes.has(creature_id):
+				creature_nodes[creature_id].bubble.clear()
+			if bool(event.get("counts_for_story", true)):
+				_register_neglect(creature_id, str(event.get("request", "")))
+		"activity_finished":
+			var activity := str(event.get("activity", ""))
+			if creature_nodes.has(creature_id):
+				if activity == "sleep":
+					creature_nodes[creature_id].set_sleeping(false)
+				else:
+					creature_nodes[creature_id].set_activity("")
+			if activity == "play":
+				status_label.text = "%s HA TERMINADO DE JUGAR Y AHORA TIENE HAMBRE." % display_name
+				if creature_nodes.has(creature_id):
+					creature_nodes[creature_id].bubble.show_symbol("creature_food", 3600.0, 105, true)
+			else:
+				status_label.text = "%s SE HA DESPERTADO." % display_name
+			if creature_id == "creature_main":
+				game_state.global_counters["sleep_cycles_since_talk"] = int(
+					game_state.global_counters.get("sleep_cycles_since_talk", 0)
+				) + 1
+			_maybe_offer_talk.call_deferred()
+		"body_changed":
+			if creature_nodes.has(creature_id):
+				creature_nodes[creature_id].set_body_state(str(event.get("body_state", "normal")))
+			status_label.text = "PIPO ESTÁ MÁS REDONDITO. ESTÁ CLARO QUE VIVE PARA COMER Y DORMIR."
+			audio_manager.play_tone("hatch")
+
+
+func _request_message(creature_id: String, request: String) -> String:
+	var display_name := str(definitions[creature_id].display_name).to_upper()
+	match request:
+		"food":
+			return "%s TIENE HAMBRE." % display_name
+		"play":
+			return "%s QUIERE JUGAR. PUEDES DEJARLA JUGANDO DURANTE TU PRÓXIMA HORA." % display_name
+		"sleep":
+			return "%s QUIERE ACURRUCARSE Y DORMIR UNA HORA." % display_name
+		"affection":
+			return "%s QUIERE UN POCO DE CARIÑO." % display_name
+	return "%s NECESITA ALGO DE TI." % display_name
+
+
+func _register_neglect(creature_id: String, request: String) -> void:
+	var total := int(game_state.global_counters.get("neglected_requests", 0))
+	if total == 0 and "chat_01" not in game_state.dialogues_seen:
+		game_state.global_counters["neglected_requests"] = 1
+		game_state.flags["first_voice_triggered"] = true
+		game_state.flags["first_neglected_creature"] = creature_id
+		game_state.flags["pending_talk_id"] = "chat_01"
+		game_state.global_counters["care_cycles_at_first_voice"] = int(
+			game_state.global_counters.get("care_cycles_completed", 0)
+		)
+		_refresh_talk_request()
+		status_label.text = "TERRY TE ESTÁ MIRANDO. POR PRIMERA VEZ, PARECE QUE QUIERE DECIR ALGO."
+		audio_manager.play_tone("talk")
+	elif total == 1:
+		var first_voice_cycles := int(game_state.global_counters.get("care_cycles_at_first_voice", 0))
+		var has_new_care := int(game_state.global_counters.get("care_cycles_completed", 0)) > first_voice_cycles
+		if not _all_dialogues_seen(PRE_ABSENCE_TALKS) or not has_new_care:
+			status_label.text = "%s SE QUEDA ESPERANDO. TERRY LO HA VISTO." % definitions[creature_id].display_name.to_upper()
+			return
+		game_state.global_counters["neglected_requests"] = 2
+		game_state.flags["pending_disappearance"] = true
+		game_state.flags["absence_waiting_for_return"] = true
+		game_state.flags["absence_return_ready"] = false
+		status_label.text = "TERRY NO APARTA LOS OJOS DEL LUGAR DE PIPO."
+		save_manager.save_game(game_state)
+	progression.evaluate(game_state)
+	_refresh_debug()
+
+
+func _all_dialogues_seen(dialogue_ids: Array) -> bool:
+	for dialogue_id in dialogue_ids:
+		if str(dialogue_id) not in game_state.dialogues_seen:
+			return false
+	return true
+
+
 func _show_status(creature_id: String) -> void:
 	var creature: Dictionary = game_state.creatures[creature_id]
 	game_state.increment_action(creature_id, "status_checks")
+	status_title.text = definitions[creature_id].display_name.to_upper()
+	var activity := str(creature.get("activity", ""))
+	if activity == "play":
+		status_details.text = "ESTÁ JUGANDO.\n\nTERMINARÁ EN %s.\n\nDESPUÉS SEGURAMENTE TENDRÁ HAMBRE." % [
+			_duration_text(int(creature.get("activity_until_unix", 0)) - int(Time.get_unix_time_from_system()))
+		]
+		status_backdrop.show()
+		return
 	if bool(creature.get("sleeping", false)):
-		status_label.text = "%s · DURMIENDO · DESPIERTA EN %s" % [
-			definitions[creature_id].display_name.to_upper(),
+		status_details.text = "ESTÁ DURMIENDO.\n\nDESPERTARÁ EN %s." % [
 			_duration_text(int(creature.get("sleep_until_unix", 0)) - int(Time.get_unix_time_from_system()))
 		]
+		status_backdrop.show()
 		return
 	var needs: Dictionary = creature["needs"]
-	status_label.text = "%s · sac %.0f · hig %.0f · ene %.0f · div %.0f · afe %.0f · sal %.0f" % [
-		definitions[creature_id].display_name,
-		needs["satiety"], needs["hygiene"], needs["energy"], needs["fun"], needs["affection"], needs["health"]
+	status_details.text = "HAMBRE      %s\nHIGIENE     %s\nENERGÍA     %s\nDIVERSIÓN   %s\nCARIÑO      %s\nSALUD       %s\n\nPREFIERE: %s" % [
+		_need_description(float(needs["satiety"])),
+		_need_description(float(needs["hygiene"])),
+		_need_description(float(needs["energy"])),
+		_need_description(float(needs["fun"])),
+		_need_description(float(needs["affection"])),
+		_need_description(float(needs["health"])),
+		_preference_text(creature_id)
 	]
+	status_backdrop.show()
 	if creature_id == "creature_b" and float(needs["satiety"]) < 50.0:
 		creature_nodes[creature_id].bubble.show_symbol("ellipsis", 1.5, 30)
+
+
+func _need_description(value: float) -> String:
+	if value >= 80.0:
+		return "MUY BIEN"
+	if value >= 55.0:
+		return "BIEN"
+	if value >= 30.0:
+		return "REGULAR"
+	return "NECESITA ATENCIÓN"
+
+
+func _preference_text(creature_id: String) -> String:
+	match creature_id:
+		"creature_a":
+			return "COMER Y DORMIR"
+		"creature_b":
+			return "JUGAR"
+	return "CARIÑO Y COMPAÑÍA"
 
 
 func _spawn_poop(creature_id: String) -> void:
@@ -961,7 +1552,7 @@ func _on_clean_poop(poop: PoopController) -> void:
 	game_state.increment_global("poops_cleaned")
 	need_system.apply_action(game_state.creatures[creature_id], "cleaned")
 	if creature_nodes.has(creature_id):
-		creature_nodes[creature_id].react("happy", "happy")
+		creature_nodes[creature_id].react("happy", "heart")
 	status_label.text = "Suciedad de %s limpiada · total %d." % [definitions[creature_id].display_name, game_state.global_counters["poops_cleaned"]]
 	audio_manager.play_tone("action")
 	cursor_manager.cancel_tool()
@@ -969,25 +1560,101 @@ func _on_clean_poop(poop: PoopController) -> void:
 
 
 func _update_prompts() -> void:
+	if bool(game_state.flags.get("absence_reveal_active", false)):
+		return
 	for creature_id in creature_nodes:
+		if creature_id == "creature_main" and str(game_state.flags.get("pending_talk_id", "")) != "":
+			creature_nodes[creature_id].bubble.show_symbol("talk", 3600.0, 110, true)
+			continue
 		var prompt := prompt_system.choose_prompt(game_state, progression, creature_id)
 		if not prompt.is_empty():
-			creature_nodes[creature_id].bubble.show_symbol(str(prompt.symbol), 3.5, int(prompt.priority))
-			if creature_id == "creature_main" and "dialogue_01" in game_state.dialogues_seen and str(prompt.source) == "narrative":
-				var phrase := prompt_system.scripted_spoken_prompt(str(prompt.symbol))
-				if phrase != "":
-					status_label.text = "Terry: «%s»" % phrase
+			var duration := 3600.0 if bool(prompt.get("persistent", false)) else 3.5
+			creature_nodes[creature_id].bubble.show_symbol(
+				str(prompt.symbol),
+				duration,
+				int(prompt.priority),
+				bool(prompt.get("persistent", false))
+			)
+
+
+func _on_symbol_pressed(symbol_id: String, creature_id: String) -> void:
+	if symbol_id != "talk" or creature_id != "creature_main":
+		return
+	_start_pending_talk()
+
+
+func _conversation_candidates() -> Array[String]:
+	var candidates: Array[String] = []
+	match game_state.phase:
+		1:
+			if "chat_01" in game_state.dialogues_seen:
+				candidates = ["chat_02", "chat_03", "chat_10", "chat_11", "chat_12"]
+		3:
+			candidates = ["chat_02", "chat_03", "chat_04", "chat_05", "chat_06"]
+		5:
+			candidates = ["chat_07", "chat_08", "chat_09"]
+	return candidates
+
+
+func _maybe_offer_talk(force: bool = false) -> void:
+	if dialogue.is_active() or not creature_nodes.has("creature_main"):
+		return
+	if str(game_state.flags.get("pending_talk_id", "")) != "":
+		_refresh_talk_request()
+		return
+	if not force and int(game_state.global_counters.get("care_cycles_since_talk", 0)) < 2:
+		return
+	for dialogue_id in _conversation_candidates():
+		if dialogue_id not in game_state.dialogues_seen:
+			game_state.flags["pending_talk_id"] = dialogue_id
+			game_state.global_counters["sleep_cycles_since_talk"] = 0
+			game_state.global_counters["care_cycles_since_talk"] = 0
+			_refresh_talk_request()
+			status_label.text = "TERRY QUIERE HABLAR CONTIGO."
+			audio_manager.play_tone("talk")
+			save_manager.save_game(game_state)
+			return
+
+
+func _refresh_talk_request() -> void:
+	if not creature_nodes.has("creature_main"):
+		return
+	var pending_id := str(game_state.flags.get("pending_talk_id", ""))
+	var bubble: SymbolBubble = creature_nodes["creature_main"].bubble
+	if pending_id != "" and not dialogue.is_active():
+		bubble.show_symbol("talk", 3600.0, 110, true)
+	elif bubble.current_symbol == "talk":
+		bubble.clear()
+
+
+func _start_pending_talk() -> void:
+	if dialogue.is_active():
+		return
+	var pending_id := str(game_state.flags.get("pending_talk_id", ""))
+	if pending_id == "":
+		return
+	if creature_nodes.has("creature_main"):
+		creature_nodes["creature_main"].bubble.clear()
+	dialogue.start(pending_id, game_state)
 
 
 func _on_progression_event(event_id: String) -> void:
 	match event_id:
 		"prepare_disappearance":
 			game_state.flags["pending_disappearance"] = true
-			status_label.text = "Las criaturas parecen cansadas. Completa otro sueño o vuelve más tarde."
+			game_state.flags["absence_waiting_for_return"] = true
+			status_label.text = "TERRY NO APARTA LOS OJOS DEL LUGAR DE PIPO."
 			save_manager.save_game(game_state)
 		"start_dialogue_02":
 			if not dialogue.is_active() and "dialogue_02" not in game_state.dialogues_seen:
 				dialogue.start("dialogue_02", game_state)
+		"prepare_second_disappearance":
+			game_state.flags["pending_mota_disappearance"] = true
+			status_label.text = "MOTA SE MANTIENE MUY CERCA DE TERRY. QUIZÁ TODOS NECESITEN DESCANSAR."
+			save_manager.save_game(game_state)
+		"start_final_dialogue":
+			if not dialogue.is_active() and "dialogue_05" not in game_state.dialogues_seen:
+				dialogue.start("dialogue_05", game_state)
 
 
 func _perform_disappearance() -> void:
@@ -997,6 +1664,11 @@ func _perform_disappearance() -> void:
 		return
 	game_state.flags["creature_a_disappeared"] = true
 	game_state.flags["pending_disappearance"] = false
+	game_state.flags["absence_waiting_for_return"] = false
+	game_state.flags["absence_return_ready"] = false
+	game_state.flags["absence_reveal_active"] = true
+	game_state.flags["first_absence_sequence_played"] = true
+	game_state.flags["pending_talk_id"] = ""
 	game_state.creatures["creature_a"]["present"] = false
 	game_state.creatures["creature_a"]["disappeared"] = true
 	progression.set_phase(game_state, 2)
@@ -1008,22 +1680,67 @@ func _perform_disappearance() -> void:
 func _run_absence_sequence() -> void:
 	if dialogue.is_active() or "dialogue_01" in game_state.dialogues_seen:
 		return
-	status_label.text = "El espacio de Pipa está vacío."
-	await get_tree().create_timer(2.0).timeout
+	_absence_generation += 1
+	var generation := _absence_generation
+	game_state.flags["absence_reveal_active"] = true
+	game_state.flags["pending_talk_id"] = ""
+	_sync_from_state()
+	for sleeping_id in ["creature_b", "creature_main"]:
+		if creature_nodes.has(sleeping_id):
+			creature_nodes[sleeping_id].bubble.clear()
+			creature_nodes[sleeping_id].set_sleeping(true)
+	status_label.text = "..."
+	save_manager.save_game(game_state)
+	await get_tree().create_timer(4.5).timeout
+	if generation != _absence_generation or dialogue.is_active() or "dialogue_01" in game_state.dialogues_seen:
+		return
 	if creature_nodes.has("creature_main"):
-		creature_nodes["creature_main"].bubble.show_symbol("ellipsis", 2.0, 90)
-		creature_nodes["creature_main"].react("first_word", "ellipsis", 2.0)
+		creature_nodes["creature_main"].set_sleeping(false)
+		creature_nodes["creature_main"].react("first_word", "", 3600.0)
+	game_state.flags["pending_talk_id"] = "dialogue_01"
+	_refresh_talk_request()
+	status_label.text = "TERRY HA ABIERTO LOS OJOS. PARECE QUE QUIERE HABLAR."
 	audio_manager.play_tone("talk")
-	await get_tree().create_timer(1.0).timeout
-	dialogue.start("dialogue_01", game_state)
+	save_manager.save_game(game_state)
+
+
+func _perform_second_disappearance() -> void:
+	if bool(game_state.flags.get("creature_b_disappeared", false)):
+		if "dialogue_04" not in game_state.dialogues_seen:
+			_run_second_absence_sequence()
+		return
+	game_state.flags["pending_mota_disappearance"] = false
+	game_state.flags["creature_b_disappeared"] = true
+	game_state.creatures["creature_b"]["present"] = false
+	game_state.creatures["creature_b"]["disappeared"] = true
+	progression.set_phase(game_state, 6)
+	_sync_from_state()
+	save_manager.save_game(game_state)
+	_run_second_absence_sequence()
+
+
+func _run_second_absence_sequence() -> void:
+	if dialogue.is_active() or "dialogue_04" in game_state.dialogues_seen:
+		return
+	status_label.text = "EL ESPACIO DE MOTA ESTÁ VACÍO."
+	await get_tree().create_timer(1.6).timeout
+	if creature_nodes.has("creature_main"):
+		creature_nodes["creature_main"].react("terrible", "heart", 2.0)
+	audio_manager.play_tone("talk")
+	await get_tree().create_timer(0.8).timeout
+	dialogue.start("dialogue_04", game_state)
 
 
 func _on_dialogue_node(dialogue_id: String, _node_id: String, node: Dictionary) -> void:
 	_dialogue_generation += 1
 	var generation := _dialogue_generation
+	status_backdrop.hide()
 	dialogue_panel.show()
 	dialogue_speaker.text = str(node.get("speaker", ""))
 	dialogue_text.text = "…"
+	var node_symbol := str(node.get("symbol", ""))
+	if node_symbol != "" and creature_nodes.has("creature_main"):
+		creature_nodes["creature_main"].bubble.show_symbol(node_symbol, 2.5, 95)
 	for child in dialogue_options.get_children():
 		child.queue_free()
 	var delay := float(node.get("delay", 0.0))
@@ -1031,14 +1748,14 @@ func _on_dialogue_node(dialogue_id: String, _node_id: String, node: Dictionary) 
 		await get_tree().create_timer(delay).timeout
 	if generation != _dialogue_generation:
 		return
-	dialogue_text.text = "«%s»" % str(node.get("text", ""))
+	dialogue_text.text = "«%s»" % _dialogue_node_text(node)
 	audio_manager.play_tone("talk")
 	var options: Array = node.get("options", [])
 	if not options.is_empty():
 		for i in options.size():
 			var option: Dictionary = options[i]
-			var button := _make_button(str(option.get("text", "")), Vector2.ZERO, Vector2(80, 39), 6)
-			button.custom_minimum_size = Vector2(80, 39)
+			var button := _make_button(str(option.get("text", "")), Vector2.ZERO, Vector2(84, 44), 6)
+			button.custom_minimum_size = Vector2(84, 44)
 			button.pressed.connect(dialogue.choose_option.bind(i, game_state))
 			dialogue_options.add_child(button)
 	else:
@@ -1048,17 +1765,56 @@ func _on_dialogue_node(dialogue_id: String, _node_id: String, node: Dictionary) 
 		dialogue_options.add_child(button)
 
 
+func _dialogue_node_text(node: Dictionary) -> String:
+	var resolved_text := str(node.get("text", ""))
+	var neglected_id := str(game_state.flags.get("first_neglected_creature", ""))
+	var neglected_name := "ALGUIEN"
+	if definitions.has(neglected_id):
+		neglected_name = str(definitions[neglected_id].display_name)
+	resolved_text = resolved_text.replace("{neglected_name}", neglected_name)
+	var answer_ref := str(node.get("answer_ref", ""))
+	if answer_ref != "":
+		var variants: Dictionary = node.get("text_by_answer", {})
+		var answer := str(game_state.answers.get(answer_ref, ""))
+		if variants.has(answer):
+			return str(variants[answer])
+	return resolved_text
+
+
 func _on_dialogue_finished(dialogue_id: String) -> void:
 	dialogue_panel.hide()
+	if dialogue_id.begins_with("chat_"):
+		game_state.flags["pending_talk_id"] = ""
+		game_state.global_counters["sleep_cycles_since_talk"] = 0
+		game_state.global_counters["care_cycles_since_talk"] = 0
+		if creature_nodes.has("creature_main"):
+			creature_nodes["creature_main"].bubble.clear()
+		status_label.text = "TERRY SE QUEDA PENSANDO EN TU RESPUESTA."
+		progression.evaluate(game_state)
 	if dialogue_id == "dialogue_01":
+		_absence_generation += 1
+		game_state.flags["pending_talk_id"] = ""
+		game_state.flags["absence_reveal_active"] = false
 		game_state.capture_post_dialogue_baseline()
 		progression.set_phase(game_state, 3)
-		status_label.text = "Terry ya habla. Sus símbolos señalan lo que falta para continuar."
+		status_label.text = "MOTA SE DESPIERTA. TERRY SIGUE MIRANDO EL HUECO DE PIPO."
 	elif dialogue_id == "dialogue_02":
 		progression.set_phase(game_state, 4)
 		if "show_player_place" not in game_state.unlocks:
 			game_state.unlocks.append("show_player_place")
-		status_label.text = "Se ha desbloqueado una nueva acción."
+		status_label.text = "TERRY ESPERA QUE LE ENSEÑES TU LADO."
+	elif dialogue_id == "dialogue_03":
+		game_state.flags["player_place_shown"] = true
+		progression.set_phase(game_state, 5)
+		status_label.text = "TERRY YA SABE QUE EXISTE ALGO AL OTRO LADO."
+	elif dialogue_id == "dialogue_04":
+		progression.set_phase(game_state, 7)
+		game_state.global_counters["final_feed_count"] = 0
+		status_label.text = "TERRY TODAVÍA TIENE HAMBRE."
+	elif dialogue_id == "dialogue_05":
+		game_state.flags["true_ending_seen"] = true
+		progression.set_phase(game_state, 8)
+		status_label.text = "ALGO HA GOLPEADO EL OTRO LADO DEL CRISTAL."
 	_sync_from_state()
 	save_manager.save_game(game_state)
 
@@ -1078,9 +1834,9 @@ func _show_player_place() -> void:
 	tween_out.tween_property(fade_overlay, "color", Color(0, 0, 0, 0), 2.0)
 	await tween_out.finished
 	fade_overlay.hide()
-	game_state.flags["player_place_shown"] = true
 	special_button.hide()
-	status_label.text = "Terry continúa en su sitio."
+	status_label.text = "TERRY TE ESTÁ MIRANDO."
+	dialogue.start("dialogue_03", game_state)
 	save_manager.save_game(game_state)
 
 
@@ -1093,13 +1849,10 @@ func debug_hatch_all() -> void:
 
 func debug_satisfy_phase_one() -> void:
 	debug_hatch_all()
-	for creature_id in TerryGameState.CREATURE_IDS:
-		game_state.creatures[creature_id]["counters"]["fed"] = 2
-		game_state.creatures[creature_id]["counters"]["played"] = 1
-	game_state.creatures["creature_main"]["counters"]["petted"] = 2
-	game_state.creatures["creature_main"]["counters"]["slept"] = 1
-	game_state.global_counters["poops_cleaned"] = 1
-	game_state.global_counters["care_time"] = 30.0
+	game_state.global_counters["neglected_requests"] = 2
+	game_state.flags["first_voice_triggered"] = true
+	game_state.flags["first_neglected_creature"] = "creature_b"
+	_story_mark_dialogues(PRE_ABSENCE_TALKS)
 	progression.evaluate(game_state)
 	_refresh_debug()
 
@@ -1107,9 +1860,10 @@ func debug_satisfy_phase_one() -> void:
 func debug_complete_post_requirements() -> void:
 	if game_state.post_baseline.is_empty():
 		game_state.capture_post_dialogue_baseline()
-	game_state.creatures["creature_main"]["counters"]["fed"] = int(game_state.post_baseline["creature_main"].get("fed", 0)) + 5
-	game_state.creatures["creature_main"]["counters"]["played"] = int(game_state.post_baseline["creature_main"].get("played", 0)) + 5
-	game_state.global_counters["poops_cleaned"] = int(game_state.post_baseline["global"].get("poops_cleaned", 0)) + 10
+	game_state.global_counters["care_cycles_completed"] = int(
+		game_state.post_baseline["global"].get("care_cycles_completed", 0)
+	) + 6
+	_story_mark_dialogues(["chat_04", "chat_05", "chat_06"])
 	if game_state.phase < 3:
 		progression.set_phase(game_state, 3)
 	progression.reset_event_latch(3)
@@ -1166,7 +1920,7 @@ func _debug_add_clean() -> void:
 
 
 func _debug_advance_phase() -> void:
-	progression.set_phase(game_state, mini(4, game_state.phase + 1))
+	progression.set_phase(game_state, mini(8, game_state.phase + 1))
 	_sync_from_state()
 
 
@@ -1242,8 +1996,8 @@ func _make_action_button(action_id: String, label_text: String, at: Vector2) -> 
 	button.tooltip_text = label_text.capitalize()
 	var icon := TextureRect.new()
 	icon.name = "Icon"
-	icon.position = Vector2(12, 2)
-	icon.size = Vector2(22, 22)
+	icon.position = Vector2(10, 1)
+	icon.size = Vector2(26, 26)
 	icon.texture = _icon_texture(action_id)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -1278,17 +2032,22 @@ func _tool_texture(tool_id: String) -> AtlasTexture:
 		"pet": Vector2i(0, 0),
 		"rub": Vector2i(1, 0),
 		"egg_food": Vector2i(2, 0),
-		"food": Vector2i(0, 1),
-		"play": Vector2i(1, 1),
-		"sleep": Vector2i(2, 1),
-		"clean": Vector2i(0, 2),
-		"status": Vector2i(1, 2),
-		"forbidden": Vector2i(2, 2)
+		"food": Vector2i(3, 0),
+		"play": Vector2i(4, 0),
+		"sleep": Vector2i(5, 0),
+		"clean": Vector2i(6, 0),
+		"status": Vector2i(7, 0)
 	}
 	var cell: Vector2i = cells.get(tool_id, Vector2i.ZERO)
 	var atlas := AtlasTexture.new()
-	atlas.atlas = load(TOOL_CURSOR_SHEET)
-	atlas.region = Rect2(cell.x * TOOL_CELL_SIZE, cell.y * TOOL_CELL_SIZE, TOOL_CELL_SIZE, TOOL_CELL_SIZE)
+	atlas.atlas = load(ACTION_ICON_SHEET)
+	atlas.region = Rect2(
+		cell.x * ACTION_ICON_CELL_SIZE,
+		cell.y * ACTION_ICON_CELL_SIZE,
+		ACTION_ICON_CELL_SIZE,
+		ACTION_ICON_CELL_SIZE
+	)
+	atlas.filter_clip = true
 	return atlas
 
 
@@ -1367,7 +2126,15 @@ func _phase_name(phase_id: int) -> String:
 		3:
 			return "DESPUÉS DE LAS PALABRAS"
 		4:
-			return "TU LADO"
+			return "LA PREGUNTA"
+		5:
+			return "TRAS EL CRISTAL"
+		6:
+			return "LA AUSENCIA DE MOTA"
+		7:
+			return "MÁS"
+		8:
+			return "EL OTRO LADO"
 	return "DESCONOCIDA"
 
 

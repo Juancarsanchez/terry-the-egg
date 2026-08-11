@@ -5,7 +5,7 @@ signal rubbed(creature_id: String)
 signal feed_dropped(creature_id: String)
 signal hover_changed(kind: String, entered: bool)
 
-const EGG_SHEET: Texture2D = preload("res://assets/eggs/egg-sprites.png")
+const EGG_SHEET: Texture2D = preload("res://assets/eggs/egg-stage-sprites.png")
 
 var creature_id := ""
 var tint := Color.WHITE
@@ -134,11 +134,16 @@ func _draw() -> void:
 			column = 1
 		"creature_main":
 			column = 2
-	var row := 1 if visual_state == "hatching" else 0
-	var source := Rect2(120 + column * 432, row * 512, 432, 512)
+	var rows := {
+		"intact": 0,
+		"crack_25": 1,
+		"crack_50": 2,
+		"crack_75": 3,
+		"hatching": 4
+	}
+	var row: int = int(rows.get(visual_state, 0))
+	var source := Rect2(column * 432, row * 512, 432, 512)
 	draw_texture_rect_region(EGG_SHEET, Rect2(0, bob_y, 64, 78), source)
-	if visual_state in ["crack_25", "crack_50", "crack_75"]:
-		_draw_progress_cracks(visual_state, bob_y)
 	if _care_flash > 0.0:
 		_draw_warmth_sparkles(center)
 	if _click_flash > 0.0:
@@ -151,40 +156,6 @@ func _draw_ellipse_shape(center: Vector2, radius: Vector2, color: Color) -> void
 		var angle := TAU * float(i) / 32.0
 		points.append(center + Vector2(cos(angle) * radius.x, sin(angle) * radius.y))
 	draw_colored_polygon(points, color)
-
-
-func _draw_progress_cracks(stage: String, bob_y: float) -> void:
-	var cream := Color("#FFF3DE")
-	var ink := Color("#4C4053")
-	var first_crack := PackedVector2Array([
-		Vector2(45, 18 + bob_y),
-		Vector2(42, 21 + bob_y),
-		Vector2(45, 24 + bob_y)
-	])
-	draw_polyline(first_crack, cream, 2.5, true)
-	draw_polyline(first_crack, ink, 1.1, true)
-	if stage in ["crack_50", "crack_75"]:
-		var upper_extension := PackedVector2Array([
-			Vector2(45, 18 + bob_y), Vector2(48, 15 + bob_y)
-		])
-		var lower_extension := PackedVector2Array([
-			Vector2(45, 24 + bob_y),
-			Vector2(41, 28 + bob_y),
-			Vector2(44, 32 + bob_y)
-		])
-		draw_polyline(upper_extension, cream, 2.5, true)
-		draw_polyline(upper_extension, ink, 1.1, true)
-		draw_polyline(lower_extension, cream, 2.5, true)
-		draw_polyline(lower_extension, ink, 1.1, true)
-	if stage == "crack_75":
-		var second_crack := PackedVector2Array([
-			Vector2(22, 49 + bob_y),
-			Vector2(19, 52 + bob_y),
-			Vector2(22, 55 + bob_y),
-			Vector2(19, 58 + bob_y)
-		])
-		draw_polyline(second_crack, cream, 2.5, true)
-		draw_polyline(second_crack, ink, 1.1, true)
 
 
 func _draw_warmth_sparkles(center: Vector2) -> void:

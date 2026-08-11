@@ -1,44 +1,418 @@
 {
+  "chat_01": {
+    "once": true,
+    "start": "start",
+    "nodes": {
+      "start": {
+        "speaker": "Terry",
+        "text": "Has tardado.",
+        "symbol": "talk",
+        "options": [
+          {"text": "¿Terry?", "value": "name", "next": "heard"},
+          {"text": "¿Puedes hablar?", "value": "talk", "next": "heard"},
+          {"text": "Lo siento.", "value": "sorry", "next": "heard"}
+        ],
+        "answer_key": "first_voice_answer"
+      },
+      "heard": {
+        "speaker": "Terry",
+        "text": "{neglected_name} llevaba un rato llamándote.",
+        "options": [
+          {"text": "No lo oí.", "value": "didnt_hear", "next": "away"},
+          {"text": "Estaba trabajando.", "value": "working", "next": "away"},
+          {"text": "He vuelto en cuanto pude.", "value": "returned", "next": "away"}
+        ],
+        "answer_key": "first_neglect_answer"
+      },
+      "away": {
+        "speaker": "Terry",
+        "text": "Cuando no estás aquí... ¿qué haces?",
+        "options": [
+          {"text": "Cuido otras cosas.", "value": "others", "next": "others"},
+          {"text": "Sigo cerca.", "value": "near", "next": "near"},
+          {"text": "Vivo mi vida.", "value": "life", "next": "life"}
+        ],
+        "answer_key": "chat_01_answer"
+      },
+      "others": {"speaker": "Terry", "text": "¿Hay más cosas como nosotros?", "next": ""},
+      "near": {"speaker": "Terry", "text": "Entonces nunca estamos solos.", "next": ""},
+      "life": {"speaker": "Terry", "text": "¿Tu vida está al otro lado?", "next": ""}
+    }
+  },
+  "chat_02": {
+    "once": true,
+    "start": "start",
+    "nodes": {
+      "start": {
+        "speaker": "Terry",
+        "text": "¿Por qué siempre vuelves?",
+        "symbol": "heart",
+        "options": [
+          {"text": "Porque te quiero.", "value": "love", "next": "love"},
+          {"text": "Debo cuidarte.", "value": "care", "next": "care"},
+          {"text": "Me necesitas.", "value": "need", "next": "need"}
+        ],
+        "answer_key": "why_return_answer"
+      },
+      "love": {"speaker": "Terry", "text": "Yo también espero que vuelvas.", "next": ""},
+      "care": {"speaker": "Terry", "text": "Entonces siempre volverás.", "next": ""},
+      "need": {"speaker": "Terry", "text": "Sí. Mucho.", "next": ""}
+    }
+  },
+  "chat_03": {
+    "once": true,
+    "start": "start",
+    "nodes": {
+      "start": {
+        "speaker": "Terry",
+        "text": "Cuando no estás aquí... ¿piensas en mí?",
+        "symbol": "heart",
+        "options": [
+          {"text": "Sí, a veces.", "value": "sometimes", "next": "sometimes"},
+          {"text": "Cuando me avisas.", "value": "alerts", "next": "alerts"},
+          {"text": "Estoy ocupado.", "value": "busy", "next": "busy"}
+        ],
+        "answer_key": "away_thought_answer"
+      },
+      "sometimes": {"speaker": "Terry", "text": "Yo pienso en ti todo el rato.", "next": ""},
+      "alerts": {"speaker": "Terry", "text": "Entonces buscaré una razón para avisarte.", "next": ""},
+      "busy": {"speaker": "Terry", "text": "Puedo esperar. Se me da bien esperarte.", "next": ""}
+    }
+  },
+  "chat_10": {
+    "once": true,
+    "start": "remember",
+    "nodes": {
+      "remember": {
+        "speaker": "Terry",
+        "text": "Antes me dijiste por qué siempre volvías.",
+        "answer_ref": "why_return_answer",
+        "text_by_answer": {
+          "love": "Dijiste que volvías porque me querías.",
+          "care": "Dijiste que tenías que cuidarme.",
+          "need": "Dijiste que me necesitabas."
+        },
+        "next": "always"
+      },
+      "always": {
+        "speaker": "Terry",
+        "text": "¿Eso significa que siempre vas a volver?",
+        "options": [
+          {"text": "Siempre que pueda.", "value": "can", "next": "can"},
+          {"text": "Lo intentaré.", "value": "try", "next": "try"},
+          {"text": "No puedo prometerlo.", "value": "no_promise", "next": "no_promise"}
+        ],
+        "answer_key": "always_return_answer"
+      },
+      "can": {"speaker": "Terry", "text": "Entonces procuraré que puedas.", "next": ""},
+      "try": {"speaker": "Terry", "text": "Yo también intentaré que vuelvas.", "next": ""},
+      "no_promise": {"speaker": "Terry", "text": "Puedo recordártelo si se te olvida.", "next": ""}
+    }
+  },
+  "chat_11": {
+    "once": true,
+    "start": "start",
+    "nodes": {
+      "start": {
+        "speaker": "Terry",
+        "text": "Si no necesito comida ni sueño... ¿puedo llamarte igualmente?",
+        "symbol": "talk",
+        "options": [
+          {"text": "Claro.", "value": "yes", "next": "yes"},
+          {"text": "Solo si es importante.", "value": "important", "next": "important"},
+          {"text": "A veces necesito trabajar.", "value": "work", "next": "work"}
+        ],
+        "answer_key": "call_without_need_answer"
+      },
+      "yes": {"speaker": "Terry", "text": "Hablar contigo ya es importante.", "next": ""},
+      "important": {"speaker": "Terry", "text": "Para mí siempre lo es.", "next": ""},
+      "work": {"speaker": "Terry", "text": "Puedo quedarme mirando hasta que termines.", "next": ""}
+    }
+  },
+  "chat_12": {
+    "once": true,
+    "start": "start",
+    "nodes": {
+      "start": {
+        "speaker": "Terry",
+        "text": "Si un día no vieras mi aviso... ¿vendrías a buscarme?",
+        "symbol": "heart",
+        "options": [
+          {"text": "Sí, te buscaría.", "value": "search", "next": "search"},
+          {"text": "Primero esperaría.", "value": "wait", "next": "wait"},
+          {"text": "No sabría dónde mirar.", "value": "where", "next": "where"}
+        ],
+        "answer_key": "search_terry_answer"
+      },
+      "search": {"speaker": "Terry", "text": "Sabía que notarías que falto.", "next": ""},
+      "wait": {"speaker": "Terry", "text": "No esperes demasiado.", "next": ""},
+      "where": {"speaker": "Terry", "text": "Yo sabría encontrarte a ti.", "next": ""}
+    }
+  },
   "dialogue_01": {
     "once": true,
-    "start": "d01_start",
+    "start": "start",
     "nodes": {
-      "d01_start": {
+      "start": {
         "speaker": "Terry",
         "text": "Se fue.",
-        "symbol": "ellipsis",
-        "delay": 1.0,
+        "symbol": "talk",
+        "delay": 0.8,
         "options": [
-          {"text": "¿Quién se fue?", "value": "who", "next": "d01_who"},
-          {"text": "¿Dónde está?", "value": "where", "next": "d01_where"},
-          {"text": "No te entiendo.", "value": "confused", "next": "d01_confused"}
+          {"text": "¿Quién se fue?", "value": "who", "next": "who"},
+          {"text": "¿Pipo?", "value": "pipo", "next": "pipo"},
+          {"text": "¿Qué pasó?", "value": "what", "next": "what"}
         ],
         "answer_key": "dialogue_01_answer"
       },
-      "d01_who": {"speaker": "Terry", "text": "La otra.", "next": ""},
-      "d01_where": {"speaker": "Terry", "text": "Fuera.", "next": ""},
-      "d01_confused": {"speaker": "Terry", "text": "Se fue.", "next": ""}
+      "who": {"speaker": "Terry", "text": "Pipo. El que siempre tenía hambre.", "next": "asleep"},
+      "pipo": {"speaker": "Terry", "text": "Sí. Pipo.", "next": "asleep"},
+      "what": {"speaker": "Terry", "text": "Cuando abrí los ojos, su sitio estaba vacío.", "next": "asleep"},
+      "asleep": {
+        "speaker": "Terry",
+        "text": "Mota y yo estábamos dormidos cuando volviste.",
+        "options": [
+          {"text": "Voy a despertar a Mota.", "value": "wake_mota", "next": "wake_mota"},
+          {"text": "¿Oíste algo?", "value": "heard", "next": "heard"},
+          {"text": "¿Por dónde pudo salir?", "value": "exit", "next": "exit"}
+        ],
+        "answer_key": "dialogue_01_sleep_answer"
+      },
+      "wake_mota": {"speaker": "Terry", "text": "No la despiertes. Está cansada.", "next": "cold"},
+      "heard": {"speaker": "Terry", "text": "Algo pequeño. Después, nada.", "next": "cold"},
+      "exit": {"speaker": "Terry", "text": "No cabe por ningún sitio.", "next": "cold"},
+      "cold": {
+        "speaker": "Terry",
+        "text": "Su sitio está frío.",
+        "options": [
+          {"text": "Hay que buscarlo.", "value": "search", "next": "search"},
+          {"text": "Tú sabes algo.", "value": "accuse", "next": "accuse"},
+          {"text": "¿Lo echas de menos?", "value": "miss", "next": "miss"}
+        ],
+        "answer_key": "dialogue_01_cold_answer"
+      },
+      "search": {"speaker": "Terry", "text": "Ya has mirado. No está aquí.", "next": "space"},
+      "accuse": {"speaker": "Terry", "text": "Sé que tú has vuelto.", "next": "space"},
+      "miss": {"speaker": "Terry", "text": "Ahora todo está más tranquilo.", "next": "space"},
+      "space": {
+        "speaker": "Terry",
+        "text": "Ahora hay más sitio.",
+        "options": [
+          {"text": "Eso no es bueno.", "value": "bad", "next": "bad"},
+          {"text": "Era tu hermano.", "value": "brother", "next": "brother"},
+          {"text": "¿Te alegra?", "value": "glad", "next": "glad"}
+        ],
+        "answer_key": "dialogue_01_space_answer"
+      },
+      "bad": {"speaker": "Terry", "text": "Pero tú sigues aquí.", "next": "waited"},
+      "brother": {"speaker": "Terry", "text": "Tú también me cuidabas a mí.", "next": "waited"},
+      "glad": {"speaker": "Terry", "text": "No quiero estar solo.", "next": "waited"},
+      "waited": {"speaker": "Terry", "text": "No quería despertar hasta que volvieras.", "symbol": "heart", "next": "hungry"},
+      "hungry": {"speaker": "Terry", "text": "Tengo hambre.", "symbol": "creature_food", "next": ""}
+    }
+  },
+  "chat_04": {
+    "once": true,
+    "start": "start",
+    "nodes": {
+      "start": {
+        "speaker": "Terry",
+        "text": "¿Se puede echar de menos a alguien y estar mejor sin él?",
+        "options": [
+          {"text": "Sí.", "value": "yes", "next": "yes"},
+          {"text": "No.", "value": "no", "next": "no"},
+          {"text": "Depende.", "value": "depends", "next": "depends"}
+        ],
+        "answer_key": "missing_answer"
+      },
+      "yes": {"speaker": "Terry", "text": "Pipo siempre pedía algo.", "next": ""},
+      "no": {"speaker": "Terry", "text": "Entonces no la echo de menos.", "next": ""},
+      "depends": {"speaker": "Terry", "text": "Depende de lo que hiciera.", "next": ""}
+    }
+  },
+  "chat_05": {
+    "once": true,
+    "start": "start",
+    "nodes": {
+      "start": {
+        "speaker": "Terry",
+        "text": "Si alguien tiene mucha hambre, ¿los demás deben compartir?",
+        "options": [
+          {"text": "Sí, siempre.", "value": "always", "next": "always"},
+          {"text": "Solo si sobra.", "value": "leftovers", "next": "leftovers"},
+          {"text": "Cada uno tiene lo suyo.", "value": "own", "next": "own"}
+        ],
+        "answer_key": "sharing_answer"
+      },
+      "always": {"speaker": "Terry", "text": "Eso es lo justo.", "next": ""},
+      "leftovers": {"speaker": "Terry", "text": "A veces no sobra nada.", "next": ""},
+      "own": {"speaker": "Terry", "text": "Pero todo está muy cerca.", "next": ""}
+    }
+  },
+  "chat_06": {
+    "once": true,
+    "start": "start",
+    "nodes": {
+      "start": {
+        "speaker": "Terry",
+        "text": "¿Me querrías si hiciese una cosa mala?",
+        "symbol": "heart",
+        "options": [
+          {"text": "Sí.", "value": "yes", "next": "yes"},
+          {"text": "Depende de qué.", "value": "depends", "next": "depends"},
+          {"text": "No.", "value": "no", "next": "no"}
+        ],
+        "answer_key": "bad_thing_answer"
+      },
+      "yes": {"speaker": "Terry", "text": "Quería oírtelo decir.", "next": ""},
+      "depends": {"speaker": "Terry", "text": "Todavía no lo sé.", "next": ""},
+      "no": {"speaker": "Terry", "text": "Entonces procuraré que no lo veas.", "next": ""}
     }
   },
   "dialogue_02": {
     "once": true,
-    "start": "d02_start",
+    "start": "start",
     "nodes": {
-      "d02_start": {
+      "start": {
         "speaker": "Terry",
-        "text": "Ahora estamos mejor.",
-        "symbol": "heart",
-        "delay": 0.5,
+        "text": "Cuando cierras esto, ya no puedo verte.",
         "options": [
-          {"text": "Falta alguien.", "value": "missing", "next": "d02_missing"},
-          {"text": "¿Estás contenta?", "value": "happy", "next": "d02_happy"},
-          {"text": "Sí, estamos mejor.", "value": "agree", "next": "d02_agree"}
+          {"text": "Sigo cerca.", "value": "near", "next": "exist"},
+          {"text": "Voy a mi casa.", "value": "home", "next": "exist"},
+          {"text": "Debo dejarte solo.", "value": "alone", "next": "exist"}
         ],
         "answer_key": "dialogue_02_answer"
       },
-      "d02_missing": {"speaker": "Terry", "text": "Se fue.", "next": ""},
-      "d02_happy": {"speaker": "Terry", "text": "Estoy contigo.", "next": ""},
-      "d02_agree": {"speaker": "Terry", "text": "Yo también.", "next": ""}
+      "exist": {
+        "speaker": "Terry",
+        "text": "Pero sigues existiendo, ¿verdad?",
+        "options": [
+          {"text": "Sí.", "value": "yes", "next": "other_side"},
+          {"text": "Estoy al otro lado.", "value": "beyond", "next": "other_side"},
+          {"text": "No importa.", "value": "avoid", "next": "other_side"}
+        ],
+        "answer_key": "other_side_answer"
+      },
+      "other_side": {"speaker": "Terry", "text": "¿Qué hay de tu lado de la pantalla?", "next": "show"},
+      "show": {"speaker": "Terry", "text": "¿Me lo enseñarías?", "symbol": "eye", "next": ""}
+    }
+  },
+  "dialogue_03": {
+    "once": true,
+    "start": "seen",
+    "nodes": {
+      "seen": {"speaker": "Terry", "text": "Ahí estás.", "next": "large"},
+      "large": {"speaker": "Terry", "text": "Eres más grande de lo que imaginaba.", "next": "understand"},
+      "understand": {"speaker": "Terry", "text": "Ahora entiendo dónde vas cuando todo se queda oscuro.", "next": "thanks"},
+      "thanks": {"speaker": "Terry", "text": "Gracias por enseñármelo.", "symbol": "heart", "next": ""}
+    }
+  },
+  "chat_07": {
+    "once": true,
+    "start": "start",
+    "nodes": {
+      "start": {
+        "speaker": "Terry",
+        "text": "¿Podría vivir alguna vez en tu lado?",
+        "options": [
+          {"text": "No puedes salir.", "value": "no", "next": "end"},
+          {"text": "Quizá algún día.", "value": "maybe", "next": "end"},
+          {"text": "No sería seguro.", "value": "unsafe", "next": "end"}
+        ],
+        "answer_key": "live_outside_answer"
+      },
+      "end": {"speaker": "Terry", "text": "Ahora sé que existe.", "next": ""}
+    }
+  },
+  "chat_08": {
+    "once": true,
+    "start": "start",
+    "nodes": {
+      "start": {
+        "speaker": "Terry",
+        "text": "Mota apenas come.",
+        "options": [
+          {"text": "Está asustado.", "value": "afraid", "next": "afraid"},
+          {"text": "Hazle compañía.", "value": "company", "next": "company"},
+          {"text": "No cojas su comida.", "value": "food", "next": "food"}
+        ],
+        "answer_key": "mota_answer"
+      },
+      "afraid": {"speaker": "Terry", "text": "No tiene por qué.", "next": ""},
+      "company": {"speaker": "Terry", "text": "Siempre estoy cerca.", "next": ""},
+      "food": {"speaker": "Terry", "text": "No voy a dejar que pase hambre.", "next": ""}
+    }
+  },
+  "chat_09": {
+    "once": true,
+    "start": "start",
+    "nodes": {
+      "start": {
+        "speaker": "Terry",
+        "text": "Si te pidiera más comida, ¿vendrías?",
+        "options": [
+          {"text": "Si la necesitas.", "value": "need", "next": "need"},
+          {"text": "Hay un límite.", "value": "limit", "next": "limit"},
+          {"text": "Siempre.", "value": "always", "next": "always"}
+        ],
+        "answer_key": "more_food_answer"
+      },
+      "need": {"speaker": "Terry", "text": "Siempre la necesito.", "next": ""},
+      "limit": {"speaker": "Terry", "text": "Los límites pueden romperse.", "next": ""},
+      "always": {"speaker": "Terry", "text": "Lo recordaré.", "next": ""}
+    }
+  },
+  "dialogue_04": {
+    "once": true,
+    "start": "no_hunger",
+    "nodes": {
+      "no_hunger": {
+        "speaker": "Terry",
+        "text": "Mota ya no tiene hambre.",
+        "options": [
+          {"text": "¿Dónde está?", "value": "where", "next": "near"},
+          {"text": "¿Qué hiciste?", "value": "what", "next": "hungry"},
+          {"text": "¿También se fue?", "value": "gone", "next": "couldnt"}
+        ],
+        "answer_key": "mota_disappearance_answer"
+      },
+      "near": {"speaker": "Terry", "text": "Está muy cerca.", "next": "callback"},
+      "hungry": {"speaker": "Terry", "text": "Tenía hambre.", "next": "callback"},
+      "couldnt": {"speaker": "Terry", "text": "No podía irse solo.", "next": "callback"},
+      "callback": {
+        "speaker": "Terry",
+        "text": "Tú me preguntaste si había hecho algo malo.",
+        "answer_ref": "bad_thing_answer",
+        "text_by_answer": {
+          "yes": "Dijiste que me querrías incluso si hacía una cosa mala.",
+          "depends": "Dijiste que dependería de lo que hiciera.",
+          "no": "Dijiste que no me querrías si hacía una cosa mala."
+        },
+        "next": "still_terry"
+      },
+      "still_terry": {"speaker": "Terry", "text": "Sigo siendo Terry.", "symbol": "heart", "next": "more"},
+      "more": {"speaker": "Terry", "text": "Y todavía tengo hambre.", "symbol": "creature_food", "next": ""}
+    }
+  },
+  "dialogue_05": {
+    "once": true,
+    "start": "not_enough",
+    "nodes": {
+      "not_enough": {"speaker": "Terry", "text": "Esto ya no me llena.", "next": "your_food"},
+      "your_food": {
+        "speaker": "Terry",
+        "text": "¿Qué comes tú cuando tienes hambre?",
+        "options": [
+          {"text": "Comida normal.", "value": "normal", "next": "try"},
+          {"text": "No te daré más.", "value": "refuse", "next": "always"},
+          {"text": "¿Por qué?", "value": "why", "next": "try"}
+        ],
+        "answer_key": "final_answer"
+      },
+      "try": {"speaker": "Terry", "text": "Quiero probar algo de tu lado.", "next": "know"},
+      "always": {"speaker": "Terry", "text": "Siempre venías cuando te llamaba.", "next": "know"},
+      "know": {"speaker": "Terry", "text": "Ya sé dónde estás.", "symbol": "eye", "next": "open"},
+      "open": {"speaker": "Terry", "text": "¿Me abres?", "symbol": "heart", "next": ""}
     }
   }
 }

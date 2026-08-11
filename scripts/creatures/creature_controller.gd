@@ -6,6 +6,7 @@ signal hover_changed(kind: String, entered: bool)
 
 const CREATURE_SHEET: Texture2D = preload("res://assets/creatures/creature-sprites.png")
 const REACTION_SHEET: Texture2D = preload("res://assets/creatures/creature-reactions.png")
+const PIPO_CHUBBY: Texture2D = preload("res://assets/creatures/pipo-chubby.png")
 const SPRITE_CELL_SIZE := 418.0
 const REACTION_ROW_HEIGHT := 460.0
 const INK := Color("#4C4053")
@@ -16,6 +17,8 @@ var cursor_manager: CursorManager
 var bubble: SymbolBubble
 var state_name := "idle"
 var sleeping := false
+var activity := ""
+var body_state := "normal"
 var _petting := false
 var _hovered := false
 var _pet_distance := 0.0
@@ -49,7 +52,7 @@ func _process(delta: float) -> void:
 	if _reaction_time > 0.0:
 		_reaction_time -= delta
 		if _reaction_time <= 0.0 and not sleeping:
-			state_name = "idle"
+			state_name = "play" if activity == "play" else "idle"
 	queue_redraw()
 
 
@@ -98,10 +101,14 @@ func _on_gui_input(event: InputEvent) -> void:
 
 
 func react(animation: String, symbol: String = "", duration: float = 0.8) -> void:
+	if sleeping:
+		if symbol != "":
+			bubble.show_symbol(symbol, duration, 90 if animation == "refuse" else 25)
+		return
 	state_name = animation
 	_reaction_time = duration
 	if symbol != "":
-		bubble.show_symbol(symbol, duration, 25)
+		bubble.show_symbol(symbol, duration, 90 if animation == "refuse" else 25)
 
 
 func set_sleeping(value: bool) -> void:
@@ -114,6 +121,24 @@ func set_sleeping(value: bool) -> void:
 		bubble.hide_symbol("sleep")
 
 
+func set_activity(value: String, until_unix: int = 0) -> void:
+	activity = value
+	if value == "play":
+		state_name = "play"
+		_reaction_time = 0.0
+	elif value == "sleep":
+		set_sleeping(true)
+	elif not sleeping:
+		state_name = "idle"
+		_reaction_time = 0.0
+	queue_redraw()
+
+
+func set_body_state(value: String) -> void:
+	body_state = value
+	queue_redraw()
+
+
 func _draw() -> void:
 	var bob := 0.0 if sleeping else sin(_animation_time * 3.0) * 1.5
 	var sprite_rect := Rect2(1, 7 + bob, 62, 62)
@@ -122,11 +147,6 @@ func _draw() -> void:
 		sprite_rect.size.y -= 3
 	var center := Vector2(32, sprite_rect.end.y - 4)
 	draw_body_ellipse(center, Vector2(24, 4), Color(0.18, 0.24, 0.17, 0.18))
-	if _hovered and cursor_manager != null and cursor_manager.selected_tool == "":
-		draw_arc(Vector2(32, 42 + bob), 29 + sin(_animation_time * 5.0), PI * 1.1, PI * 1.9, 14, Color("#F26F62"), 2.0)
-	if _petting:
-		for offset in [-8.0, 0.0, 8.0]:
-			draw_line(Vector2(32 + offset - 3, 12 + bob), Vector2(32 + offset + 3, 9 + bob), Color("#F26F62"), 1.5)
 	var texture := CREATURE_SHEET
 	var source := Rect2(
 		_sprite_column() * SPRITE_CELL_SIZE,
@@ -134,7 +154,16 @@ func _draw() -> void:
 		SPRITE_CELL_SIZE,
 		SPRITE_CELL_SIZE
 	)
+	var uses_chubby_asset := (
+		definition.creature_id == "creature_a"
+		and body_state == "chubby"
+		and not sleeping
+		and state_name not in ["play", "eat", "refuse"]
+	)
 	var uses_reaction_asset := sleeping or state_name == "refuse"
+	if uses_chubby_asset:
+		texture = PIPO_CHUBBY
+		source = Rect2(Vector2.ZERO, PIPO_CHUBBY.get_size())
 	if uses_reaction_asset:
 		texture = REACTION_SHEET
 		var reaction_y := 125.0 if sleeping else 600.0
@@ -145,7 +174,7 @@ func _draw() -> void:
 			REACTION_ROW_HEIGHT
 		)
 	draw_texture_rect_region(texture, sprite_rect, source)
-	if not uses_reaction_asset:
+	if not uses_reaction_asset and not uses_chubby_asset:
 		_draw_eye_expression(sprite_rect)
 	if _click_flash > 0.0:
 		_draw_click_flash(Vector2(32, 39 + bob))

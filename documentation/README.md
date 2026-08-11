@@ -1,12 +1,12 @@
 # Terry the Egg — vertical slice
 
-Prototipo 2D para Godot 4.x, escrito íntegramente en GDScript. Usa una única pantalla lógica de 320 × 288, escalado entero y filtro nearest. No usa IA, entrada de texto libre, cámara, micrófono, red ni archivos ajenos al guardado del juego.
+Prototipo 2D para Godot 4.x escrito en GDScript. Utiliza una pantalla lógica de 320 × 288, escalado entero y una interfaz inspirada en mascotas virtuales clásicas. No usa entrada de texto libre, cámara, micrófono ni red.
 
 ## Ejecutar
 
 1. Abre `project.godot` con Godot 4.x.
-2. Pulsa **F6/F5** o el botón de ejecutar proyecto.
-3. Para las pruebas automatizadas:
+2. Pulsa **F5** para ejecutar el proyecto.
+3. Pruebas automatizadas:
 
    `godot --headless --path . --script tests/test_runner.gd`
 
@@ -14,62 +14,57 @@ La escena principal es `res://scenes/main/main.tscn`.
 
 ## Controles
 
-- Ratón sobre huevo/criatura: cursor de mano.
-- Mantener clic izquierdo y mover de lado a lado sobre un huevo: frotar.
-- Mantener clic izquierdo y recorrer una distancia corta sobre una criatura: acariciar.
-- **Comer**: une nutriente al cursor durante incubación y comida después; suéltalo sobre el objetivo.
-- **Jugar**, **Dormir** o **Estado**: selecciona la acción y pulsa una criatura.
-- **Limpiar**: selecciona la herramienta y pulsa una suciedad concreta.
-- Clic derecho: cancela la herramienta.
-- **F3** o **Ctrl+D**: muestra/oculta el panel de depuración.
+- Mantener el botón izquierdo y moverlo de lado a lado sobre un huevo: acariciar el cascarón.
+- Mantener el botón izquierdo y recorrer una distancia corta sobre una criatura: acariciarla.
+- **Comer**: néctar durante la incubación y cuenco después del nacimiento.
+- **Jugar**: deja a la criatura entretenida durante una hora real; al terminar tendrá hambre.
+- **Siesta**: deja a la criatura dormida durante una hora real.
+- **Mirar**: muestra su estado, actividad actual y preferencia de cuidado sin revelar contadores internos.
+- **Aseo**: selecciona una suciedad concreta.
+- Burbuja con el retrato de Terry: conversación pendiente; el mismo retrato aparece en el cursor.
+- Clic derecho: cancelar herramienta.
 
-Terry necesita una caricia válida antes de cada sueño.
+Terry necesita una caricia válida antes de dormir. El juego está pensado para permanecer abierto mientras se trabaja o estudia: las criaturas avisan cuando necesitan algo y conceden treinta minutos para responder.
 
 ## Flujo narrativo
 
-La fase de incubación termina al abrir los tres huevos. La convivencia se completa al alimentar dos veces a cada criatura, jugar una vez con cada una, acariciar dos veces a Terry, hacerla dormir, limpiar una suciedad y acumular 20 segundos de cuidado activo.
+La incubación combina dos tandas de néctar y cuatro tandas de mimos. Las grietas del 25 %, 50 % y 75 % están integradas en sprites completos del huevo.
 
-Al quedar lista la desaparición, Pipa desaparece al terminar un sueño de Terry o al abrir de nuevo el juego. El evento queda guardado inmediatamente. Terry inicia después el diálogo «Se fue.» con tres respuestas cerradas.
+Tras el nacimiento conviven Pipo, Mota y Terry. La primera petición aparece quince minutos después y, a partir de ahí, los ciclos ordinarios se separan aproximadamente una hora. Pipo prefiere comer y dormir; Mota pide jugar con mucha más frecuencia; Terry busca principalmente compañía. Después de cuatro cuidados favoritos y una jornada de ocho horas, Pipo adopta su aspecto más redondito.
 
-Al finalizar ese diálogo se toma una fotografía de los contadores. Desde ese punto deben realizarse con Terry cinco comidas, cinco juegos y diez limpiezas. `RequirementPromptSystem` elige símbolos a partir de lo que falte, con prioridad: necesidad crítica, requisito narrativo, necesidad normal y personalidad. El diálogo 2 desbloquea **Enseñarle tu lado**, un fundido a negro local sin acceso a dispositivos.
+El primer aviso desatendido hace que Terry hable por primera vez. A partir de ahí mantiene cinco conversaciones breves de apego: recuerda respuestas anteriores y, en la tercera, repite literalmente por qué dijo el jugador que volvería. El segundo descuido narrativo solo cuenta después de completar esta cadena y al menos otro ciclo de cuidado.
 
-## Datos y extensibilidad
+Pipo nunca desaparece delante del jugador. El cambio queda preparado hasta que la aplicación pierde el foco o la partida se abre de nuevo. Al regresar, Pipo ya no está, Mota y Terry aparecen dormidos y no aceptan acciones. Tras unos segundos Terry abre los ojos, muestra su retrato de conversación y comienza «Se fue» cuando el jugador decide hablarle. El hueco de Pipo puede inspeccionarse y conserva una marca fría donde dormía.
 
-- `data/creatures/creatures.json`: nombres, colores, siluetas, personalidad, deterioro y reglas especiales.
-- `data/phases/phases.json`: fases, acciones disponibles y requisitos reutilizables.
-- `data/dialogues/dialogues.json`: nodos, opciones cerradas, respuestas y enlaces.
-- `data/requirements/post_dialogue.json`: forma documental del conjunto de requisitos post-diálogo.
-- `data/actions/actions.json`: etiquetas y símbolos de acciones.
+Las siguientes conversaciones aparecen cada dos ciclos de cuidado satisfactorios; no pueden acelerarse repitiendo siestas o pulsando una acción sin que haya una necesidad real.
 
-Para añadir una criatura, agrega su definición y estado inicial en `TerryGameState.CREATURE_IDS`, así como una posición en la escena principal. Para añadir un diálogo, crea una entrada con `start` y `nodes`; cada opción tiene un valor persistente y un `next`. Para crear una fase, agrega un objeto a `phases.json` y usa los tipos de requisito ya soportados por `ProgressionDirector`.
+Durante la siguiente etapa Terry pregunta por compartir, por echar de menos y finalmente: «¿Me querrías si hiciese una cosa mala?». Más tarde pregunta qué existe al otro lado de la pantalla. **Enseñarle tu lado** responde a esa pregunta y funciona como punto medio, no como desenlace.
 
-## Arquitectura
+Tras tres charlas adicionales desaparece Mota. Terry recuerda la respuesta del jugador, pide comida por encima del límite habitual y termina preguntando qué come el jugador y si puede abrirle.
 
-- `TerryGameState`: estado serializable, necesidades, contadores, flags, respuestas y desbloqueos.
-- `CreatureDefinition`, `CreatureController`, `NeedSystem`: datos, interacción visual y deterioro.
-- `EggController`: calor, gesto con inversión de dirección, grietas y nacimiento.
-- `CursorManager`, `ItemDragController`: cursores centralizados, herramienta y validación de drop.
-- `SymbolBubble`: prioridad, duración, persistencia y secuencias de símbolos.
-- `ProgressionDirector`, `RequirementPromptSystem`: fases por datos y peticiones antbloqueo.
-- `DialogueManager`: árboles totalmente escritos y respuestas cerradas.
-- `SaveManager`: JSON persistente y deterioro offline limitado.
-- `AudioManager`: pitidos no verbales generados localmente.
+## Datos
 
-## Guardado
+- `data/creatures/creatures.json`: personalidad, color y reglas de cada criatura.
+- `data/phases/phases.json`: nueve fases narrativas y sus requisitos.
+- `data/dialogues/dialogues.json`: charlas recurrentes y conversaciones principales.
+- `data/requirements/post_dialogue.json`: versión documental de los requisitos posteriores a Pipo.
+- `data/actions/actions.json`: etiquetas y símbolos de las acciones.
 
-El archivo se escribe en `user://terry_the_egg_save.json`. En Windows suele corresponder a `%APPDATA%/Godot/app_userdata/Terry the Egg/terry_the_egg_save.json`. El panel de depuración permite guardar, cargar o borrar únicamente este archivo.
+## Assets
 
-## Sprites y animaciones
+- `assets/eggs/egg-stage-sprites.png`: cinco estados completos para cada huevo.
+- `assets/creatures/creature-sprites.png`: poses principales.
+- `assets/creatures/creature-reactions.png`: sueño y negativa.
+- `assets/creatures/pipo-chubby.png`: evolución corporal de Pipo al final de la primera jornada.
+- `assets/ui/action-icons.png`: iconos normalizados del HUD sin contaminación entre celdas.
+- `assets/ui/reaction-symbols.png`: única hoja activa de expresiones.
+- `assets/ui/tool-cursors.png`: cursores artísticos.
+- `assets/ui/terry-talk.png`: retrato transparente usado para avisos y cursor de conversación.
 
-Los placeholders actuales se dibujan en `EggController` y `CreatureController`, de modo que no requieren assets externos. Para sustituirlos:
+Los arcos y líneas rojas del sistema visual anterior han sido retirados. Las reacciones de agradecimiento usan siempre el corazón.
 
-- fotogramas recomendados: 32 × 32 o 48 × 48 píxeles;
-- convención: `<creature_id>_<animation>_<frame>.png`;
-- 2–4 fotogramas por animación;
-- 4–8 FPS, con nearest y sin mipmaps;
-- reúne los fotogramas en `SpriteFrames`, añade un `AnimatedSprite2D` al controlador y conserva los nombres de estado (`idle`, `eat`, `happy`, `sleep`, `play`, `pet_reaction`, `talk`, etc.);
-- para una animación nueva, añade el nombre al recurso visual y haz que `react()` lo seleccione; la lógica de necesidades no cambia.
+## Guardado y revisión
 
-## Limitaciones deliberadas
+La partida se guarda en `user://terry_the_egg_save.json`, incluyendo peticiones, límites de atención, bloques de juego o sueño, evolución corporal, respuestas, conversaciones pendientes, desapariciones y desenlace.
 
-El prototipo usa animación procedural de pocos estados, pitidos sintetizados y una sola comida genérica. La suciedad se distribuye alrededor de las criaturas sin navegación. No hay minijuego: jugar es una reacción corta preparada para reemplazarse. El panel de depuración prioriza controles compactos y edición explícita por botones; no es una herramienta final para diseñadores.
+La versión para jugadores no incluye navegador narrativo, selector de hitos ni panel técnico. Todo el recorrido debe desbloquearse jugando y cuidando a las criaturas.

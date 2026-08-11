@@ -9,10 +9,17 @@ func tick_creature(creature: Dictionary, definition: CreatureDefinition, delta: 
 	if bool(creature.get("sleeping", false)):
 		creature["needs"]["energy"] = minf(100.0, float(creature["needs"]["energy"]) + 4.0 * delta)
 		return
+	var activity := str(creature.get("activity", ""))
+	if activity == "play":
+		creature["needs"]["fun"] = 100.0
 	for need_name in definition.decay:
 		if need_name == "health":
 			continue
 		var rate := float(definition.decay[need_name])
+		if activity == "play" and need_name == "fun":
+			continue
+		if activity == "play" and need_name == "satiety":
+			rate *= 1.25
 		creature["needs"][need_name] = maxf(0.0, float(creature["needs"][need_name]) - rate * delta)
 	var critical_count := 0
 	for need_name in ["satiety", "hygiene", "energy", "fun", "affection"]:
@@ -35,8 +42,6 @@ func apply_offline_decay(state: TerryGameState, definitions: Dictionary, elapsed
 			creature["needs"]["energy"] = 100.0
 			if sleep_until > now:
 				continue
-			creature["sleeping"] = false
-			creature["sleep_until_unix"] = 0
 			decay_seconds = minf(capped, maxf(0.0, float(now - sleep_until)))
 		var definition: CreatureDefinition = definitions[creature_id]
 		for need_name in definition.decay:

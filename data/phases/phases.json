@@ -9,44 +9,80 @@
     },
     {
       "id": 1,
-      "name": "Convivencia",
+      "name": "Los tres hermanos",
       "available_actions": ["feed", "play", "sleep", "clean", "status"],
       "requirements": [
-        {"type": "each_action", "action": "fed", "amount": 2},
-        {"type": "each_action", "action": "played", "amount": 1},
-        {"type": "action", "target": "creature_main", "action": "petted", "amount": 2},
-        {"type": "action", "target": "creature_main", "action": "slept", "amount": 1},
-        {"type": "global", "action": "poops_cleaned", "amount": 1},
-        {"type": "active_time", "amount": 20}
+        {"type": "dialogue_seen", "dialogue": "chat_01"},
+        {"type": "dialogue_seen", "dialogue": "chat_02"},
+        {"type": "dialogue_seen", "dialogue": "chat_03"},
+        {"type": "dialogue_seen", "dialogue": "chat_10"},
+        {"type": "dialogue_seen", "dialogue": "chat_11"},
+        {"type": "dialogue_seen", "dialogue": "chat_12"},
+        {"type": "global", "action": "neglected_requests", "amount": 2}
       ],
       "close_event": "prepare_disappearance",
       "next_phase": 2
     },
     {
       "id": 2,
-      "name": "La ausencia",
+      "name": "La ausencia de Pipo",
       "available_actions": ["feed", "play", "sleep", "clean", "status"],
       "requirements": [{"type": "dialogue_seen", "dialogue": "dialogue_01"}],
       "next_phase": 3
     },
     {
       "id": 3,
-      "name": "Después de las palabras",
+      "name": "Terry aprende a hablar",
       "available_actions": ["feed", "play", "sleep", "clean", "status"],
       "requirements": [
-        {"type": "post_action", "target": "creature_main", "action": "fed", "amount": 5},
-        {"type": "post_action", "target": "creature_main", "action": "played", "amount": 5},
-        {"type": "post_global", "action": "poops_cleaned", "amount": 10}
+        {"type": "post_global", "action": "care_cycles_completed", "amount": 6},
+        {"type": "dialogue_seen", "dialogue": "chat_04"},
+        {"type": "dialogue_seen", "dialogue": "chat_05"},
+        {"type": "dialogue_seen", "dialogue": "chat_06"}
       ],
       "close_event": "start_dialogue_02",
       "next_phase": 4
     },
     {
       "id": 4,
-      "name": "Tu lado",
+      "name": "La pregunta",
       "available_actions": ["feed", "play", "sleep", "clean", "status", "show_player_place"],
       "requirements": [{"type": "flag", "flag": "player_place_shown"}],
-      "next_phase": 4
+      "next_phase": 5
+    },
+    {
+      "id": 5,
+      "name": "Al otro lado del cristal",
+      "available_actions": ["feed", "play", "sleep", "clean", "status"],
+      "requirements": [
+        {"type": "dialogue_seen", "dialogue": "chat_07"},
+        {"type": "dialogue_seen", "dialogue": "chat_08"},
+        {"type": "dialogue_seen", "dialogue": "chat_09"}
+      ],
+      "close_event": "prepare_second_disappearance",
+      "next_phase": 6
+    },
+    {
+      "id": 6,
+      "name": "La ausencia de Mota",
+      "available_actions": ["feed", "play", "sleep", "clean", "status"],
+      "requirements": [{"type": "dialogue_seen", "dialogue": "dialogue_04"}],
+      "next_phase": 7
+    },
+    {
+      "id": 7,
+      "name": "Más",
+      "available_actions": ["feed", "status"],
+      "requirements": [{"type": "global", "action": "final_feed_count", "amount": 3}],
+      "close_event": "start_final_dialogue",
+      "next_phase": 8
+    },
+    {
+      "id": 8,
+      "name": "El otro lado",
+      "available_actions": ["status"],
+      "requirements": [{"type": "flag", "flag": "true_ending_seen"}],
+      "next_phase": 8
     }
   ]
 }

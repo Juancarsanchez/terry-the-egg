@@ -1,0 +1,13 @@
+Terry the Egg — Beta 0.1.0
+Plataforma: Windows x86_64
+Motor: Godot 4.6.3 stable
+Tipo: exportación Release, sin consola ni herramientas de depuración
+Fecha de compilación: 11 de agosto de 2026
+
+SHA-256
+-------
+TerryTheEgg-Beta.exe
+2863f0d45a868d05304a649beb6a5116f3bd06c729594c8f075b9f0e11daac83
+
+TerryTheEgg-Beta.pck
+86388248682bb11a3236344129b43df3984082027476715620e81d15a76ebb81
