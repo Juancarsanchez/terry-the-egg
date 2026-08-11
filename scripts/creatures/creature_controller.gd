@@ -9,6 +9,8 @@ const REACTION_SHEET: Texture2D = preload("res://assets/creatures/creature-react
 const PIPO_CHUBBY: Texture2D = preload("res://assets/creatures/pipo-chubby.png")
 const SPRITE_CELL_SIZE := 418.0
 const REACTION_ROW_HEIGHT := 460.0
+const LEFT_EYE_ANCHOR := Vector2(198.0 / SPRITE_CELL_SIZE, 200.0 / SPRITE_CELL_SIZE)
+const RIGHT_EYE_ANCHOR := Vector2(289.0 / SPRITE_CELL_SIZE, 200.0 / SPRITE_CELL_SIZE)
 const INK := Color("#4C4053")
 const EYE_GOLD := Color("#F4C452")
 
@@ -201,17 +203,23 @@ func _draw_eye_expression(sprite_rect: Rect2) -> void:
 	var expression := _eye_expression()
 	if expression == "normal":
 		return
-	var left_eye := sprite_rect.position + Vector2(sprite_rect.size.x * 0.425, sprite_rect.size.y * 0.34)
-	var right_eye := sprite_rect.position + Vector2(sprite_rect.size.x * 0.59, sprite_rect.size.y * 0.34)
+	var eye_positions := _eye_positions(sprite_rect)
 	if expression == "closed":
-		for eye in [left_eye, right_eye]:
+		for eye in eye_positions:
 			_draw_body_ellipse(eye, Vector2(4.7, 3.8), definition.color)
 			draw_arc(eye + Vector2(0, 0.8), 3.2, 0.15, PI - 0.15, 8, INK, 1.5)
 		return
-	for eye in [left_eye, right_eye]:
+	for eye in eye_positions:
 		draw_circle(eye, 4.8, INK)
 		draw_circle(eye, 3.5, EYE_GOLD)
 		draw_circle(eye, 0.8, Color("#17111A"))
+
+
+func _eye_positions(sprite_rect: Rect2) -> Array[Vector2]:
+	return [
+		sprite_rect.position + sprite_rect.size * LEFT_EYE_ANCHOR,
+		sprite_rect.position + sprite_rect.size * RIGHT_EYE_ANCHOR,
+	]
 
 
 func _eye_expression() -> String:

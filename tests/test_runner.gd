@@ -232,6 +232,13 @@ func _test_mouse_gestures() -> void:
 	creature._on_mouse_exited()
 	creature.react("first_word")
 	_check(creature._eye_expression() == "pinprick", "la primera frase activa la mirada de pupila diminuta")
+	var eye_positions := creature._eye_positions(Rect2(1, 7, 62, 62))
+	_check(
+		eye_positions[0].y > 35.0
+		and eye_positions[1].y > 35.0
+		and eye_positions[0].x < eye_positions[1].x,
+		"los parpados se dibujan sobre los ojos y no encima de las orejas"
+	)
 	creature.react("play")
 	_check(creature._sprite_row() == 1, "jugar utiliza la pose con el brazo levantado")
 	creature.react("eat")
@@ -274,6 +281,11 @@ func _test_integrated_main_flow() -> void:
 		)
 	_check(labels_fit, "los nombres quedan centrados dentro de sus botones")
 	_check(game.theme.default_font.resource_path.ends_with("PixelifySans-Variable.ttf"), "todo el HUD usa la tipografía retro nueva")
+	_check(
+		game.theme.default_font.multichannel_signed_distance_field
+		and int(game.theme.default_font.subpixel_positioning) == 0,
+		"la tipografia conserva nitidez al redimensionar la ventana"
+	)
 	var phase_hint_visible := false
 	for visible_label in game.find_children("*", "Label", true, false):
 		if visible_label.is_visible_in_tree() and str(visible_label.text).begins_with("FASE"):
